@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BTP Manager Pro - Planning Fixe</title>
+    <title>BTP Manager Pro v5</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,7 +13,6 @@
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .gantt-text-plain { color: #000000; font-weight: 700; font-size: 10px; pointer-events: none; }
         input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
         input[type=range]::-webkit-slider-runnable-track { background: #e2e8f0; height: 8px; border-radius: 4px; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 18px; width: 18px; background: #2563eb; border-radius: 50%; margin-top: -5px; border: 2px solid white; cursor: pointer; }
@@ -42,7 +41,7 @@
 
         window.FirebaseOps = {
             saveData: async (data) => {
-                await setDoc(doc(db, "data", "btp_v3_main"), { content: JSON.stringify(data) });
+                await setDoc(doc(db, "data", "btp_v3_main"), { content: JSON.stringify(data), lastUpdate: new Date().toISOString() });
             },
             subscribeData: (callback) => {
                 return onSnapshot(doc(db, "data", "btp_v3_main"), (doc) => {
@@ -63,11 +62,12 @@
                 calendar: <><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
                 list: <><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></>,
                 edit: <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>,
+                wallet: <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4Z"/>,
                 plus: <path d="M12 5v14M5 12h14"/>,
+                camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
                 chevronDown: <path d="m6 9 6 6 6-6"/>,
                 chevronRight: <path d="m9 18 6-6-6-6"/>,
-                x: <path d="M18 6 6 18M6 6l12 12"/>,
-                link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                trash: <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || null}</svg>;
         };
@@ -76,14 +76,14 @@
             const [view, setView] = useState('projects'); 
             const [selectedProjectId, setSelectedProjectId] = useState(null);
             const [projects, setProjects] = useState([]);
-            const [zoomLevel, setZoomLevel] = useState(15); // Dézoom plus important (par défaut 15px/jour)
+            const [zoomLevel, setZoomLevel] = useState(15);
             const [isCloudLoading, setIsCloudLoading] = useState(true);
             const [collapsedLots, setCollapsedLots] = useState({});
 
             useEffect(() => {
-                const checkAuth = setInterval(() => {
+                const interval = setInterval(() => {
                     if (window.FirebaseOps) {
-                        clearInterval(checkAuth);
+                        clearInterval(interval);
                         window.FirebaseOps.initAuth().then(() => {
                             window.FirebaseOps.subscribeData((data) => {
                                 setProjects(data || []);
@@ -96,14 +96,13 @@
 
             useEffect(() => {
                 if (!isCloudLoading && window.FirebaseOps) {
-                    const timer = setTimeout(() => window.FirebaseOps.saveData(projects), 1000);
+                    const timer = setTimeout(() => window.FirebaseOps.saveData(projects), 1500);
                     return () => clearTimeout(timer);
                 }
             }, [projects]);
 
             const activeProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
-            // Calcul des dates réelles avec liaison
             const processedTasks = useMemo(() => {
                 if (!activeProject) return [];
                 const results = {};
@@ -118,160 +117,136 @@
                     if (st.linkedTo) {
                         const prev = calculate(st.linkedTo, visited);
                         if (prev) {
-                            const date = new Date(prev.calculatedStart);
-                            date.setDate(date.getDate() + parseInt(prev.duration || 1));
-                            finalStart = date.toISOString().split('T')[0];
+                            const d = new Date(prev.calculatedStart);
+                            d.setDate(d.getDate() + parseInt(prev.duration || 1));
+                            finalStart = d.toISOString().split('T')[0];
                         }
                     }
                     results[id] = { ...st, calculatedStart: finalStart };
                     return results[id];
                 };
                 allSubtasks.forEach(s => calculate(s.id));
-                return activeProject.tasks.map(t => ({
-                    ...t, 
-                    subtasks: t.subtasks.map(s => results[s.id] || s)
-                }));
+                return activeProject.tasks.map(t => ({ ...t, subtasks: t.subtasks.map(s => results[s.id] || s) }));
             }, [activeProject]);
 
-            // Génération de l'échelle de temps couvrant TOUT le chantier
             const timelineDates = useMemo(() => {
-                let start = new Date();
-                let end = new Date();
-                end.setMonth(end.getMonth() + 3); // Par défaut 3 mois
-
+                let start = new Date(); let end = new Date(); end.setMonth(end.getMonth() + 4);
                 if (processedTasks.length > 0) {
-                    processedTasks.forEach(t => {
-                        t.subtasks.forEach(s => {
-                            const dStart = new Date(s.calculatedStart);
-                            const dEnd = new Date(dStart);
-                            dEnd.setDate(dEnd.getDate() + parseInt(s.duration || 1));
-                            if (dStart < start) start = new Date(dStart);
-                            if (dEnd > end) end = new Date(dEnd);
-                        });
-                    });
+                    processedTasks.forEach(t => t.subtasks.forEach(s => {
+                        const ds = new Date(s.calculatedStart); const de = new Date(ds); de.setDate(de.getDate() + parseInt(s.duration || 1));
+                        if (ds < start) start = new Date(ds); if (de > end) end = new Date(de);
+                    }));
                 }
-                
-                start.setDate(start.getDate() - 10); // Marge début
-                end.setDate(end.getDate() + 30);    // Marge fin
-
-                const dates = [];
-                let current = new Date(start);
-                while (current <= end) {
-                    dates.push(new Date(current));
-                    current.setDate(current.getDate() + 1);
-                }
+                start.setDate(start.getDate() - 7); end.setDate(end.getDate() + 30);
+                const dates = []; let curr = new Date(start);
+                while (curr <= end) { dates.push(new Date(curr)); curr.setDate(curr.getDate() + 1); }
                 return dates;
             }, [processedTasks]);
 
-            // Groupement par mois pour l'affichage
             const monthsHeader = useMemo(() => {
                 const months = [];
                 timelineDates.forEach(d => {
                     const label = d.toLocaleDateString('fr', { month: 'long', year: 'numeric' });
-                    if (months.length === 0 || months[months.length - 1].label !== label) {
-                        months.push({ label, count: 1 });
-                    } else {
-                        months[months.length - 1].count++;
-                    }
+                    if (months.length === 0 || months[months.length - 1].label !== label) months.push({ label, count: 1 });
+                    else months[months.length - 1].count++;
                 });
                 return months;
             }, [timelineDates]);
 
-            if (isCloudLoading) return <div className="h-screen bg-slate-900 flex items-center justify-center text-white font-black uppercase text-[10px] tracking-widest">Synchronisation...</div>;
+            const updateSubtask = (tId, sId, data) => {
+                setProjects(prev => prev.map(p => p.id === selectedProjectId ? {
+                    ...p, tasks: p.tasks.map(t => t.id === tId ? {
+                        ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? { ...s, ...data } : s)
+                    } : t)
+                } : p));
+            };
+
+            if (isCloudLoading) return <div className="h-screen bg-slate-900 flex items-center justify-center text-white font-black uppercase text-[10px]">Chargement...</div>;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-900">
                     <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center z-50 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-blue-600 p-2 rounded-lg"><Icon name="home" size={18}/></div>
-                            <h1 className="font-black text-xl italic tracking-tighter">BTP MANAGER</h1>
-                        </div>
+                        <h1 className="font-black text-xl italic uppercase">BTP MANAGER</h1>
+                        {activeProject && <span className="text-[10px] font-bold text-slate-400 truncate max-w-[150px] uppercase tracking-widest">{activeProject.name}</span>}
                     </header>
 
-                    <main className="flex-1 overflow-hidden relative bg-slate-50">
+                    <main className="flex-1 overflow-hidden relative">
                         {view === 'projects' && (
-                            <div className="p-8 grid gap-4 max-w-lg mx-auto">
-                                <h2 className="text-2xl font-black mb-4">Mes Chantiers</h2>
-                                {projects.map(p => (
-                                    <div key={p.id} onClick={() => { setSelectedProjectId(p.id); setView('planning'); }} className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 cursor-pointer hover:border-blue-500">
-                                        <h3 className="font-bold text-lg">{p.name}</h3>
-                                        <p className="text-[10px] font-black text-blue-500 uppercase mt-2">Accéder au planning</p>
-                                    </div>
-                                ))}
-                                <button onClick={() => { const n = prompt("Nom ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]) }} className="border-2 border-dashed p-6 rounded-[24px] text-slate-400 font-black">+ AJOUTER UN CHANTIER</button>
+                            <div className="h-full overflow-y-auto p-8 bg-slate-50">
+                                <h2 className="text-2xl font-black mb-8">Chantiers</h2>
+                                <div className="grid gap-4">
+                                    {projects.map(p => (
+                                        <div key={p.id} onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-sm cursor-pointer hover:border-blue-500">
+                                            <h3 className="font-bold text-lg">{p.name}</h3>
+                                            <p className="text-[10px] font-black text-blue-500 uppercase mt-2">{p.tasks.length} Lots</p>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => { const n = prompt("Nom ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]) }} className="border-2 border-dashed p-8 rounded-[24px] text-slate-400 font-black">+ NOUVEAU PROJET</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'details' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
+                                <div className="max-w-xl mx-auto space-y-6">
+                                    <h2 className="text-2xl font-black">{activeProject.name}</h2>
+                                    {activeProject.tasks.map(task => (
+                                        <div key={task.id} className="bg-white rounded-[24px] border p-5 shadow-sm">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="font-black text-xs uppercase text-slate-800">{task.title}</h4>
+                                                <button onClick={() => { const n = prompt("Sous-tâche ?"); if(n) updateSubtask(task.id, 'new', {id: Date.now().toString(), title: n, progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]}) }} className="text-blue-600 text-[10px] font-black">+ AJOUTER</button>
+                                            </div>
+                                            {task.subtasks.map(sub => (
+                                                <div key={sub.id} className="bg-slate-50 p-4 rounded-xl border mb-2">
+                                                    <p className="font-bold text-xs mb-3">{sub.title}</p>
+                                                    <div className="flex gap-2">
+                                                        <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded border text-xs font-bold" placeholder="Jours"/>
+                                                        <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded border text-xs font-bold"/>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                    <button onClick={() => { const n = prompt("Lot ?"); if(n) setProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, tasks: [...p.tasks, { id: Date.now().toString(), title: n, subtasks: [] }] } : p)) }} className="w-full py-4 border-2 border-dashed rounded-[24px] text-slate-400 font-black text-xs uppercase">+ AJOUTER UN LOT</button>
+                                </div>
                             </div>
                         )}
 
                         {view === 'planning' && activeProject && (
-                            <div className="h-full flex flex-col bg-white overflow-hidden">
-                                <div className="p-4 border-b flex justify-between items-center bg-slate-50 shrink-0">
-                                    <div className="flex items-center gap-4">
-                                        <button onClick={() => setView('projects')} className="bg-white p-2 rounded-lg border shadow-sm"><Icon name="chevronRight" className="rotate-180" size={16}/></button>
-                                        <h2 className="font-black text-sm uppercase">{activeProject.name}</h2>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-[9px] font-black text-slate-400 uppercase">Zoom</span>
-                                        <input type="range" min="5" max="80" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} className="w-32"/>
-                                    </div>
+                            <div className="h-full flex flex-col bg-white">
+                                <div className="p-3 border-b bg-slate-50 flex justify-between items-center shrink-0">
+                                    <span className="text-[10px] font-black uppercase text-slate-400">Échelle de temps</span>
+                                    <input type="range" min="5" max="80" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} className="w-32"/>
                                 </div>
-
                                 <div className="flex-1 overflow-auto custom-scrollbar relative">
                                     <div className="inline-block min-w-full">
-                                        {/* HEADER MOIS/ANNEE */}
-                                        <div className="flex sticky top-0 z-40">
-                                            <div className="w-48 shrink-0 bg-slate-900 border-r border-slate-800 sticky left-0 z-50"></div>
+                                        <div className="flex sticky top-0 z-40 shadow-sm">
+                                            <div className="w-40 shrink-0 bg-slate-900 sticky left-0 z-50 border-r border-slate-800"></div>
                                             {monthsHeader.map((m, i) => (
-                                                <div key={i} style={{ width: (m.count * zoomLevel) + 'px' }} className="shrink-0 bg-slate-900 text-white text-[10px] font-black uppercase py-2 px-2 border-r border-slate-800 border-b truncate sticky top-0">
-                                                    {m.label}
-                                                </div>
+                                                <div key={i} style={{ width: (m.count * zoomLevel) + 'px' }} className="shrink-0 bg-slate-900 text-white text-[9px] font-black uppercase py-2 px-2 border-r border-slate-800 truncate">{m.label}</div>
                                             ))}
                                         </div>
-
-                                        {/* HEADER JOURS */}
-                                        <div className="flex sticky top-8 z-40">
-                                            <div className="w-48 shrink-0 bg-slate-100 border-r border-slate-200 p-3 text-[10px] font-black uppercase text-slate-400 sticky left-0 z-50 border-b">Lots & Tâches</div>
+                                        <div className="flex sticky top-8 z-40 shadow-sm">
+                                            <div className="w-40 shrink-0 bg-slate-100 p-2 text-[9px] font-black uppercase text-slate-400 sticky left-0 z-50 border-r border-b">Lots / Tâches</div>
                                             {timelineDates.map((d, i) => (
-                                                <div key={i} style={{ width: zoomLevel + 'px' }} className={`shrink-0 text-center py-2 text-[9px] font-bold border-r border-b border-slate-200 ${[0, 6].includes(d.getDay()) ? 'bg-slate-50 text-slate-400' : 'bg-white'}`}>
-                                                    {zoomLevel > 12 ? d.getDate() : ''}
-                                                </div>
+                                                <div key={i} style={{ width: zoomLevel + 'px' }} className={`shrink-0 text-center py-2 text-[8px] font-bold border-r border-b ${[0, 6].includes(d.getDay()) ? 'bg-slate-50 text-slate-300' : 'bg-white'}`}>{zoomLevel > 15 ? d.getDate() : ''}</div>
                                             ))}
                                         </div>
-
-                                        {/* CORPS DU PLANNING */}
                                         {processedTasks.map(task => (
-                                            <div key={task.id} className="relative">
-                                                {/* Ligne de Lot */}
-                                                <div className="flex items-center h-10 border-b bg-slate-50 group">
-                                                    <div className="w-48 shrink-0 px-4 border-r bg-slate-100 flex items-center gap-2 sticky left-0 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
-                                                        <button onClick={() => setCollapsedLots({...collapsedLots, [task.id]: !collapsedLots[task.id]})} className="text-slate-400">
-                                                            <Icon name={collapsedLots[task.id] ? "chevronRight" : "chevronDown"} size={12}/>
-                                                        </button>
-                                                        <span className="text-[10px] font-black uppercase text-slate-700 truncate">{task.title}</span>
+                                            <div key={task.id}>
+                                                <div className="flex h-8 bg-slate-50 items-center border-b">
+                                                    <div className="w-40 shrink-0 px-2 sticky left-0 z-30 bg-slate-100 border-r flex items-center gap-1 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
+                                                        <button onClick={() => setCollapsedLots({...collapsedLots, [task.id]: !collapsedLots[task.id]})}><Icon name={collapsedLots[task.id] ? "chevronRight" : "chevronDown"} size={10}/></button>
+                                                        <span className="text-[9px] font-black uppercase truncate">{task.title}</span>
                                                     </div>
-                                                    <div className="flex-1 relative h-full bg-slate-50/30"></div>
                                                 </div>
-
-                                                {/* Lignes de Sous-tâches */}
                                                 {!collapsedLots[task.id] && task.subtasks.map(sub => {
-                                                    const start = new Date(sub.calculatedStart);
-                                                    const offset = Math.ceil((start - timelineDates[0]) / (1000 * 60 * 60 * 24));
+                                                    const start = new Date(sub.calculatedStart); const offset = Math.ceil((start - timelineDates[0]) / (1000 * 60 * 60 * 24));
                                                     return (
-                                                        <div key={sub.id} className="flex items-center h-10 border-b hover:bg-slate-50 transition-colors">
-                                                            <div className="w-48 shrink-0 px-8 border-r bg-white text-[11px] font-medium text-slate-500 truncate sticky left-0 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
-                                                                {sub.title}
-                                                            </div>
+                                                        <div key={sub.id} className="flex h-8 border-b items-center hover:bg-slate-50">
+                                                            <div className="w-40 shrink-0 px-6 sticky left-0 z-30 bg-white border-r text-[10px] text-slate-500 truncate shadow-[2px_0_5px_rgba(0,0,0,0.02)]">{sub.title}</div>
                                                             <div className="flex-1 relative h-full">
-                                                                <div 
-                                                                    className="absolute top-2 h-6 rounded shadow-sm border border-white flex items-center justify-center overflow-hidden transition-all"
-                                                                    style={{ 
-                                                                        left: (offset * zoomLevel) + 'px', 
-                                                                        width: (sub.duration * zoomLevel) + 'px',
-                                                                        backgroundColor: sub.progress == 100 ? '#22c55e' : '#3b82f6'
-                                                                    }}
-                                                                >
-                                                                    <div className="absolute inset-y-0 left-0 bg-black/20" style={{ width: sub.progress + '%' }}></div>
-                                                                    {zoomLevel > 30 && <span className="relative z-10 text-[8px] font-black text-white">{sub.progress}%</span>}
-                                                                </div>
+                                                                <div className="absolute top-1.5 h-4 rounded shadow-sm" style={{ left: (offset * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px', backgroundColor: sub.progress == 100 ? '#22c55e' : '#3b82f6' }}></div>
                                                             </div>
                                                         </div>
                                                     );
@@ -282,16 +257,63 @@
                                 </div>
                             </div>
                         )}
+
+                        {view === 'tracking' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
+                                <h2 className="text-2xl font-black mb-6">Suivi Photos</h2>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="mb-6">
+                                        <p className="text-[10px] font-black uppercase text-slate-400 mb-3">{task.title}</p>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="bg-white p-4 rounded-2xl border mb-3">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <p className="font-bold text-sm">{sub.title}</p>
+                                                    <label className="cursor-pointer text-blue-600"><Icon name="camera" size={18}/><input type="file" capture="environment" className="hidden" onChange={async (e) => {
+                                                        const file = e.target.files[0]; if(!file) return;
+                                                        const reader = new FileReader(); reader.onloadend = () => {
+                                                            const photos = sub.photos || [];
+                                                            updateSubtask(task.id, sub.id, { photos: [...photos, reader.result] });
+                                                        }; reader.readAsDataURL(file);
+                                                    }}/></label>
+                                                </div>
+                                                <input type="range" value={sub.progress} min="0" max="100" onChange={e => updateSubtask(task.id, sub.id, {progress: e.target.value})} className="mb-2"/>
+                                                <div className="flex gap-2 overflow-x-auto">
+                                                    {sub.photos?.map((p, i) => <img key={i} src={p} className="w-12 h-12 rounded object-cover border"/>)}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {view === 'budget' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 text-center">
+                                <div className="bg-blue-600 text-white p-8 rounded-[32px] mb-6">
+                                    <p className="text-xs uppercase font-black opacity-70">Total Dépenses</p>
+                                    <p className="text-4xl font-black mt-2">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
+                                </div>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="bg-white p-4 rounded-2xl border mb-3 text-left">
+                                        <p className="font-black text-[10px] uppercase mb-2">{task.title}</p>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="flex justify-between items-center py-2 border-t">
+                                                <span className="text-xs">{sub.title}</span>
+                                                <input type="number" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-20 p-1 border rounded text-xs text-right font-bold" placeholder="0 €"/>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </main>
 
-                    {/* Navigation simple */}
-                    <nav className="bg-white border-t py-2 flex justify-around items-center shrink-0 shadow-xl">
-                        <button onClick={() => setView('projects')} className={`flex flex-col items-center flex-1 ${view === 'projects' ? 'text-blue-600' : 'text-slate-400'}`}>
-                            <Icon name="home" size={20}/><span className="text-[9px] font-black uppercase mt-1">Chantiers</span>
-                        </button>
-                        <button disabled={!activeProject} onClick={() => setView('planning')} className={`flex flex-col items-center flex-1 ${view === 'planning' ? 'text-blue-600' : 'text-slate-400 opacity-20'}`}>
-                            <Icon name="calendar" size={20}/><span className="text-[9px] font-black uppercase mt-1">Planning</span>
-                        </button>
+                    <nav className="bg-white border-t px-2 py-2 flex justify-around items-center shrink-0 shadow-lg">
+                        <button onClick={() => setView('projects')} className={`flex flex-col items-center flex-1 p-2 rounded-xl ${view === 'projects' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}><Icon name="home" size={20}/><span className="text-[8px] font-black uppercase mt-1">Projets</span></button>
+                        <button disabled={!activeProject} onClick={() => setView('details')} className={`flex flex-col items-center flex-1 p-2 rounded-xl ${view === 'details' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}><Icon name="edit" size={20}/><span className="text-[8px] font-black uppercase mt-1">Lots</span></button>
+                        <button disabled={!activeProject} onClick={() => setView('planning')} className={`flex flex-col items-center flex-1 p-2 rounded-xl ${view === 'planning' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}><Icon name="calendar" size={20}/><span className="text-[8px] font-black uppercase mt-1">Gantt</span></button>
+                        <button disabled={!activeProject} onClick={() => setView('tracking')} className={`flex flex-col items-center flex-1 p-2 rounded-xl ${view === 'tracking' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}><Icon name="list" size={20}/><span className="text-[8px] font-black uppercase mt-1">Suivi</span></button>
+                        <button disabled={!activeProject} onClick={() => setView('budget')} className={`flex flex-col items-center flex-1 p-2 rounded-xl ${view === 'budget' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}><Icon name="wallet" size={20}/><span className="text-[8px] font-black uppercase mt-1">Budget</span></button>
                     </nav>
                 </div>
             );
