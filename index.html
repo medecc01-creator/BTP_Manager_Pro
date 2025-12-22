@@ -4,62 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BTP Manager Pro</title>
-    <link rel="icon" type="image/png" href="https://res.cloudinary.com/dzhkqkzrg/image/upload/v1734863336/Logo_Manager_Pro_copie_m68hda.png">
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
-        body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #0f172a; font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        .app-bg { background-color: #f8fafc; }
         .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .content-container { width: 100%; max-width: 550px; margin: 0 auto; }
         .progress-blue { -webkit-appearance: none; appearance: none; height: 10px; background: #e2e8f0; border-radius: 10px; outline: none; }
-        .progress-blue::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: #2563eb; border-radius: 50%; cursor: pointer; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .progress-blue::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: #2563eb; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .modal-overlay { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAKpd67l8OKVmvkqMYTrT1oh0c_9q5tKys",
-            authDomain: "btp-manager-pro.firebaseapp.com",
-            projectId: "btp-manager-pro",
-            storageBucket: "btp-manager-pro.firebasestorage.app",
-            messagingSenderId: "491801562192",
-            appId: "1:491801562192:web:5cc53257ae5f641a6b9555"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        window.FirebaseOps = {
-            saveData: async (data) => {
-                await setDoc(doc(db, "data", "btp_v3_main"), { content: JSON.stringify(data), lastUpdate: new Date().toISOString() });
-            },
-            subscribeData: (callback) => {
-                return onSnapshot(doc(db, "data", "btp_v3_main"), (doc) => {
-                    if (doc.exists()) callback(JSON.parse(doc.data().content));
-                    else callback([]);
-                });
-            },
-            initAuth: () => signInAnonymously(auth)
-        };
-    </script>
-
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
+
+        // --- CONFIGURATION SUPABASE ---
+        const SUPABASE_URL = 'https://VOTRE_PROJET.supabase.co';
+        const SUPABASE_ANON_KEY = 'VOTRE_CLE_ANON';
+        const supabase = net.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
@@ -72,12 +46,19 @@
                 wallet: <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4Z"/>,
                 camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
                 trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
+                logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
                 download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || null}</svg>;
         };
 
         function App() {
+            // Auth States
+            const [session, setSession] = useState(null);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            
+            // UI States
             const [view, setView] = useState('projects');
             const [selectedProjectId, setSelectedProjectId] = useState(null);
             const [projects, setProjects] = useState([]);
@@ -85,62 +66,53 @@
             const [zoomLevel, setZoomLevel] = useState(30);
             const [modal, setModal] = useState({ show: false, title: '', value: '', onConfirm: null, isConfirm: false });
 
+            // 1. Gérer la session
             useEffect(() => {
-                const interval = setInterval(() => {
-                    if (window.FirebaseOps) {
-                        clearInterval(interval);
-                        window.FirebaseOps.initAuth().then(() => {
-                            window.FirebaseOps.subscribeData((data) => {
-                                setProjects(data || []);
-                                setIsLoading(false);
-                            });
-                        });
-                    }
-                }, 100);
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    setSession(session);
+                    if (!session) setIsLoading(false);
+                });
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+                return () => subscription.unsubscribe();
             }, []);
 
+            // 2. Charger les données si connecté
             useEffect(() => {
-                if (!isLoading && window.FirebaseOps) {
-                    window.FirebaseOps.saveData(projects);
-                }
-            }, [projects]);
+                if (session) loadUserData();
+            }, [session]);
+
+            const loadUserData = async () => {
+                const { data } = await supabase.from('user_data').select('content').eq('user_id', session.user.id).single();
+                if (data) setProjects(JSON.parse(data.content));
+                setIsLoading(false);
+            };
+
+            const saveData = async (newData) => {
+                if (!session) return;
+                await supabase.from('user_data').upsert({ user_id: session.user.id, content: JSON.stringify(newData) });
+            };
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                const { error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) alert("Erreur : Identifiants incorrects");
+            };
+
+            const updateProjects = (newProjects) => {
+                setProjects(newProjects);
+                saveData(newProjects);
+            };
 
             const activeProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
+            // Fonctions utilitaires
             const updateSubtask = (tId, sId, data) => {
-                setProjects(prev => prev.map(p => p.id === selectedProjectId ? {
+                const updated = projects.map(p => p.id === selectedProjectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
                         ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? { ...s, ...data } : s)
                     } : t)
-                } : p));
-            };
-
-            const generatePDF = () => {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF();
-                const today = new Date().toLocaleDateString('fr-FR');
-                const totalBudget = activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0);
-
-                doc.setFontSize(22);
-                doc.text("RAPPORT DE CHANTIER", 14, 20);
-                doc.setFontSize(12);
-                doc.text(`Projet : ${activeProject.name}`, 14, 30);
-                doc.text(`Date : ${today}`, 14, 37);
-                doc.text(`Budget Total : ${totalBudget.toLocaleString()} €`, 14, 44);
-
-                let startY = 55;
-                activeProject.tasks.forEach(task => {
-                    doc.autoTable({
-                        startY: startY,
-                        head: [[task.title.toUpperCase(), 'Date', 'Avancement', 'Coût']],
-                        body: task.subtasks.map(s => [s.title, s.date, `${s.progress || 0}%`, `${parseFloat(s.cost || 0).toLocaleString()} €`]),
-                        theme: 'striped',
-                        headStyles: { fillColor: [15, 23, 42] }
-                    });
-                    startY = doc.lastAutoTable.finalY + 10;
-                });
-
-                doc.save(`Rapport_${activeProject.name}_${today}.pdf`);
+                } : p);
+                updateProjects(updated);
             };
 
             const handlePhotoUpload = async (tId, sId, file) => {
@@ -156,56 +128,96 @@
                 } catch (e) { alert("Erreur d'envoi"); }
             };
 
+            const generatePDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                const today = new Date().toLocaleDateString('fr-FR');
+                doc.setFontSize(20);
+                doc.text(`RAPPORT : ${activeProject.name}`, 14, 20);
+                let y = 35;
+                activeProject.tasks.forEach(task => {
+                    doc.autoTable({
+                        startY: y,
+                        head: [[task.title.toUpperCase(), 'Date', '%', 'Coût']],
+                        body: task.subtasks.map(s => [s.title, s.date, `${s.progress || 0}%`, `${s.cost || 0} €`]),
+                        theme: 'striped',
+                        headStyles: { fillColor: [15, 23, 42] }
+                    });
+                    y = doc.lastAutoTable.finalY + 10;
+                });
+                doc.save(`Rapport_${activeProject.name}.pdf`);
+            };
+
             const timelineDates = useMemo(() => {
                 const dates = []; let curr = new Date(); curr.setDate(curr.getDate() - 5);
                 for(let i=0; i<100; i++) { dates.push(new Date(curr)); curr.setDate(curr.getDate() + 1); }
                 return dates;
             }, []);
 
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-slate-900 uppercase">Synchronisation...</div>;
+            // --- VUES ---
+            
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black text-white">CHARGEMENT...</div>;
+
+            if (!session) {
+                return (
+                    <div className="h-screen flex items-center justify-center p-6 bg-slate-900">
+                        <div className="w-full max-w-sm space-y-8">
+                            <div className="text-center">
+                                <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">BTP MANAGER PRO</h1>
+                                <p className="text-slate-400 text-xs mt-2 uppercase tracking-widest">Connectez-vous pour continuer</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="bg-white p-8 rounded-[32px] space-y-4 shadow-2xl">
+                                <input type="email" placeholder="Email" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none" value={email} onChange={e=>setEmail(e.target.value)} required />
+                                <input type="password" placeholder="Mot de passe" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none" value={password} onChange={e=>setPassword(e.target.value)} required />
+                                <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-all">Se Connecter</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
 
             return (
-                <div className="flex flex-col h-screen overflow-hidden">
+                <div className="flex flex-col h-screen overflow-hidden app-bg">
                     {modal.show && (
-                        <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-6">
+                        <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-6 text-slate-900">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
                                 <h3 className="text-xl font-black italic uppercase mb-4">{modal.title}</h3>
                                 {!modal.isConfirm ? (
-                                    <input autoFocus className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 ring-blue-500 font-bold mb-6" value={modal.value} onChange={e => setModal({...modal, value: e.target.value})} />
+                                    <input autoFocus className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold mb-6" value={modal.value} onChange={e => setModal({...modal, value: e.target.value})} />
                                 ) : (
                                     <p className="text-slate-400 font-medium text-sm mb-8">Supprimer définitivement ?</p>
                                 )}
                                 <div className="flex gap-3">
                                     <button onClick={() => setModal({show:false})} className="flex-1 py-4 font-black uppercase text-[10px] text-slate-400 bg-slate-100 rounded-2xl tracking-widest">Annuler</button>
-                                    <button onClick={() => { modal.onConfirm(modal.value); setModal({show:false}); }} className={`flex-1 py-4 font-black uppercase text-[10px] text-white rounded-2xl shadow-lg ${modal.isConfirm ? 'bg-red-500' : 'bg-slate-900'}`}>Valider</button>
+                                    <button onClick={() => { modal.onConfirm(modal.value); setModal({show:false}); }} className={`flex-1 py-4 font-black uppercase text-[10px] text-white rounded-2xl ${modal.isConfirm ? 'bg-red-500' : 'bg-slate-900'}`}>Valider</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 z-50">
-                        <div className="flex items-center gap-3">
-                            <img src="https://res.cloudinary.com/dzhkqkzrg/image/upload/v1734863336/Logo_Manager_Pro_copie_m68hda.png" alt="Logo" className="w-8 h-8 object-contain"/>
-                            <h1 className="font-black italic uppercase tracking-tighter text-xs">BTP MANAGER PRO</h1>
+                        <h1 className="font-black italic uppercase tracking-tighter text-xs ml-2">BTP MANAGER PRO</h1>
+                        <div className="flex gap-2">
+                            <button onClick={() => setView('projects')} className="p-2 bg-white/10 rounded-full active:scale-90 transition-transform"><Icon name="home" size={18}/></button>
+                            <button onClick={() => supabase.auth.signOut()} className="p-2 bg-red-500/20 text-red-400 rounded-full"><Icon name="logout" size={18}/></button>
                         </div>
-                        <button onClick={() => setView('projects')} className="p-2 bg-white/10 rounded-full active:scale-90 transition-transform"><Icon name="home" size={18}/></button>
                     </header>
 
-                    <main className="flex-1 overflow-hidden bg-slate-50">
+                    <main className="flex-1 overflow-hidden relative">
                         {view === 'projects' && (
                             <div className="p-6 h-full overflow-y-auto">
                                 <div className="content-container space-y-4">
-                                    <h2 className="text-2xl font-black italic mb-6 tracking-tighter uppercase text-slate-900">Mes Chantiers</h2>
+                                    <h2 className="text-2xl font-black italic mb-6 uppercase text-slate-900">Mes Chantiers</h2>
                                     {projects.map(p => (
                                         <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center group transition-all active:scale-95">
                                             <span onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="font-black uppercase text-slate-800 tracking-tight flex-1 cursor-pointer truncate mr-4">{p.name}</span>
                                             <div className="flex gap-2">
-                                                <button onClick={() => setModal({show:true, title:"Modifier", value:p.name, onConfirm:(v)=>setProjects(prev=>prev.map(proj=>proj.id===p.id?{...proj, name:v}:proj))})} className="p-2 text-slate-200 hover:text-blue-500 transition-colors"><Icon name="edit" size={16}/></button>
-                                                <button onClick={() => setModal({show:true, title:"Supprimer ?", isConfirm:true, onConfirm:()=>setProjects(projects.filter(proj=>proj.id!==p.id))})} className="p-2 text-slate-200 hover:text-red-500 transition-colors"><Icon name="trash" size={16}/></button>
+                                                <button onClick={() => setModal({show:true, title:"Modifier", value:p.name, onConfirm:(v)=>updateProjects(projects.map(proj=>proj.id===p.id?{...proj, name:v}:proj))})} className="p-2 text-slate-200 hover:text-blue-500 transition-colors"><Icon name="edit" size={16}/></button>
+                                                <button onClick={() => setModal({show:true, title:"Supprimer ?", isConfirm:true, onConfirm:()=>updateProjects(projects.filter(proj=>proj.id!==p.id))})} className="p-2 text-slate-200 hover:text-red-500 transition-colors"><Icon name="trash" size={16}/></button>
                                             </div>
                                         </div>
                                     ))}
-                                    <button onClick={() => setModal({show:true, title:"Nouveau Chantier", value:"", onConfirm:(v)=>setProjects([...projects, {id:Date.now().toString(), name:v, tasks:[]}])})} className="w-full p-8 border-2 border-dashed border-slate-200 rounded-[28px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-white transition-all">+ Nouveau Chantier</button>
+                                    <button onClick={() => setModal({show:true, title:"Nouveau Chantier", value:"", onConfirm:(v)=>updateProjects([...projects, {id:Date.now().toString(), name:v, tasks:[]}])})} className="w-full p-8 border-2 border-dashed border-slate-200 rounded-[28px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-white transition-all">+ Nouveau Chantier</button>
                                 </div>
                             </div>
                         )}
@@ -215,33 +227,33 @@
                                 <div className="content-container space-y-6">
                                     <h2 className="text-xl font-black italic text-slate-900 uppercase tracking-tighter">{activeProject.name}</h2>
                                     {activeProject.tasks.map(task => (
-                                        <div key={task.id} className="bg-white p-5 rounded-[32px] border shadow-sm border-slate-100">
+                                        <div key={task.id} className="bg-white p-5 rounded-[32px] border shadow-sm">
                                             <div className="flex justify-between items-center mb-4 px-2">
-                                                <p onClick={() => setModal({show:true, title:"Lot", value:task.title, onConfirm:(v)=>setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.map(t=>t.id===task.id?{...t, title:v}:t)}:p))})} className="font-black text-[9px] uppercase text-slate-300 tracking-[0.2em] cursor-pointer hover:text-blue-500">{task.title}</p>
-                                                <button onClick={() => setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.filter(t=>t.id!==task.id)}:p))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
+                                                <p onClick={() => setModal({show:true, title:"Lot", value:task.title, onConfirm:(v)=>updateProjects(projects.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.map(t=>t.id===task.id?{...t, title:v}:t)}:p))})} className="font-black text-[9px] uppercase text-slate-300 tracking-[0.2em] cursor-pointer hover:text-blue-500">{task.title}</p>
+                                                <button onClick={() => updateProjects(projects.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.filter(t=>t.id!==task.id)}:p))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
                                             </div>
                                             {task.subtasks.map(sub => (
                                                 <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl mb-3 border border-slate-100">
-                                                    <div className="flex justify-between items-center mb-3">
-                                                        <span onClick={() => setModal({show:true, title:"Tâche", value:sub.title, onConfirm:(v)=>updateSubtask(task.id, sub.id, {title:v})})} className="font-bold text-xs text-slate-700 cursor-pointer">{sub.title}</span>
-                                                        <button onClick={() => setProjects(prev => prev.map(p => p.id === selectedProjectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, subtasks: t.subtasks.filter(s => s.id !== sub.id)} : t)} : p))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={12}/></button>
+                                                    <div className="flex justify-between items-center mb-3 text-slate-900">
+                                                        <span onClick={() => setModal({show:true, title:"Tâche", value:sub.title, onConfirm:(v)=>updateSubtask(task.id, sub.id, {title:v})})} className="font-bold text-xs cursor-pointer">{sub.title}</span>
+                                                        <button onClick={() => updateProjects(projects.map(p => p.id === selectedProjectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, subtasks: t.subtasks.filter(s => s.id !== sub.id)} : t)} : p))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={12}/></button>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-[10px] font-bold border-none bg-white shadow-inner outline-none"/>
-                                                        <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-[10px] font-bold border-none bg-white text-center shadow-inner outline-none" placeholder="Jrs"/>
+                                                        <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-[10px] font-bold border-none bg-white outline-none text-slate-900"/>
+                                                        <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-[10px] font-bold border-none bg-white text-center outline-none text-slate-900" placeholder="Jrs"/>
                                                     </div>
                                                 </div>
                                             ))}
                                             <button onClick={() => updateSubtask(task.id, 'new', {id: Date.now().toString(), title: "Nouvelle tâche", progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]})} className="w-full py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-white transition-all">+ Tâche</button>
                                         </div>
                                     ))}
-                                    <button onClick={() => setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:[...p.tasks, {id:Date.now().toString(), title:"Nouveau Lot", subtasks:[]}]}:p))} className="w-full py-6 border-2 border-dashed border-blue-100 rounded-[40px] text-blue-600 font-black uppercase text-[10px] tracking-widest hover:bg-white transition-all">+ Nouveau Lot</button>
+                                    <button onClick={() => updateProjects(projects.map(p=>p.id===selectedProjectId?{...p, tasks:[...p.tasks, {id:Date.now().toString(), title:"Nouveau Lot", subtasks:[]}]}:p))} className="w-full py-6 border-2 border-dashed border-blue-100 rounded-[40px] text-blue-600 font-black uppercase text-[10px] tracking-widest hover:bg-white transition-all">+ Nouveau Lot</button>
                                 </div>
                             </div>
                         )}
 
                         {view === 'planning' && activeProject && (
-                            <div className="h-full flex flex-col bg-white overflow-hidden">
+                            <div className="h-full flex flex-col bg-white overflow-hidden text-slate-900">
                                 <div className="p-4 border-b bg-slate-50 flex items-center justify-between shrink-0">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Zoom</span>
                                     <input type="range" min="15" max="80" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} className="w-32"/>
@@ -299,12 +311,12 @@
                         {view === 'tracking' && activeProject && (
                             <div className="p-6 overflow-y-auto h-full pb-32">
                                 <div className="content-container space-y-8">
-                                    <h2 className="text-2xl font-black italic tracking-tighter uppercase text-slate-900">Suivi Chantier</h2>
+                                    <h2 className="text-2xl font-black italic uppercase text-slate-900">Suivi Chantier</h2>
                                     {activeProject.tasks.map(task => (
                                         <div key={task.id}>
                                             <p className="text-[10px] font-black uppercase text-slate-300 mb-4 tracking-[0.2em]">{task.title}</p>
                                             {task.subtasks.map(sub => (
-                                                <div key={sub.id} className="bg-white p-6 rounded-[32px] border border-slate-100 mb-4 shadow-sm">
+                                                <div key={sub.id} className="bg-white p-6 rounded-[32px] border border-slate-100 mb-4 shadow-sm text-slate-900">
                                                     <div className="flex justify-between items-center mb-6">
                                                         <p className="font-bold text-sm text-slate-800">{sub.title}</p>
                                                         <label className="cursor-pointer text-blue-600 bg-blue-50 p-3 rounded-2xl active:scale-90 transition-transform">
@@ -336,7 +348,7 @@
                             <div className="p-6 overflow-y-auto h-full pb-32">
                                 <div className="content-container space-y-6">
                                     <div className="flex justify-between items-center px-4">
-                                        <h2 className="text-2xl font-black italic tracking-tighter uppercase text-slate-900 leading-none">Finance</h2>
+                                        <h2 className="text-2xl font-black italic uppercase text-slate-900 leading-none">Finance</h2>
                                         <button onClick={generatePDF} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-100 active:scale-95 transition-all">
                                             <Icon name="download" size={14}/> PDF
                                         </button>
@@ -349,8 +361,8 @@
                                         <div key={task.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
                                             <p className="font-black text-[10px] uppercase text-slate-300 mb-4 tracking-widest">{task.title}</p>
                                             {task.subtasks.map(sub => (
-                                                <div key={sub.id} className="flex justify-between items-center py-4 border-t border-slate-50">
-                                                    <span className="text-xs font-bold text-slate-600">{sub.title}</span>
+                                                <div key={sub.id} className="flex justify-between items-center py-4 border-t border-slate-50 text-slate-900">
+                                                    <span className="text-xs font-bold">{sub.title}</span>
                                                     <input type="number" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl border-none text-xs text-right font-black text-blue-600 outline-none" placeholder="0 €"/>
                                                 </div>
                                             ))}
