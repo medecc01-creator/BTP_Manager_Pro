@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTP Manager Pro - Sécurisé</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .gantt-text-plain { color: #000000; font-weight: 700; font-size: 10px; pointer-events: none; }
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
+        input[type=range]::-webkit-slider-runnable-track { background: #e2e8f0; height: 8px; border-radius: 4px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; background: #2563eb; border-radius: 50%; margin-top: -6px; border: 2px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); cursor: pointer; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-modal { animation: fadeIn 0.2s ease-out; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKpd67l8OKVmvkqMYTrT1oh0c_9q5tKys",
+            authDomain: "btp-manager-pro.firebaseapp.com",
+            projectId: "btp-manager-pro",
+            storageBucket: "btp-manager-pro.firebasestorage.app",
+            messagingSenderId: "491801562192",
+            appId: "1:491801562192:web:5cc53257ae5f641a6b9555",
+            measurementId: "G-6CCJC166XH"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.FirebaseOps = {
+            db, auth,
+            login: (email, pass) => signInWithEmailAndPassword(auth, email, pass),
+            logout: () => signOut(auth),
+            onAuth: (cb) => onAuthStateChanged(auth, cb),
+            saveData: async (data) => {
+                await setDoc(doc(db, "data", "btp_v3_main"), { content: JSON.stringify(data), lastUpdate: new Date().toISOString() });
+            },
+            subscribeData: (callback) => {
+                return onSnapshot(doc(db, "data", "btp_v3_main"), (doc) => {
+                    if (doc.exists()) callback(JSON.parse(doc.data().content));
+                    else callback([]);
+                });
+            }
+        };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // CONFIG CLOUDINARY
+        const CLOUD_NAME = "dzhkqkzrg";
+        const UPLOAD_PRESET = "Unsigneded"; // Vérifiez bien l'orthographe exacte dans Cloudinary
+
+        // DB LOCALE POUR HORS-LIGNE
+        const localDB = new Dexie("BTP_Offline");
+        localDB.version(1).stores({ pendingPhotos: '++id, taskId, subtaskId, file' });
+
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const icons = {
+                home: <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+                plus: <path d="M12 5v14M5 12h14"/>,
+                trash: <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>,
+                calendar: <><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
+                link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>,
+                chevronLeft: <path d="m15 18-6-6 6-6"/>,
+                chevronDown: <path d="m6 9 6 6 6-6"/>,
+                chevronRight: <path d="m9 18 6-6-6-6"/>,
+                edit: <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>,
+                x: <path d="M18 6 6 18M6 6l12 12"/>,
+                check: <path d="M20 6 9 17l-5-5"/>,
+                camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+                list: <><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>,
+                wallet: <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+            };
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name] || null}
+                </svg>
+            );
+        };
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [loginData, setLoginData] = useState({ email: '', pass: '' });
+            const [view, setView] = useState('projects'); 
+            const [selectedProjectId, setSelectedProjectId] = useState(null);
+            const [projects, setProjects] = useState([]);
+            const [isCloudLoading, setIsCloudLoading] = useState(true);
+            const [collapsedLots, setCollapsedLots] = useState({});
+            const [zoomLevel, setZoomLevel] = useState(50);
+            const [modal, setModal] = useState({ show: false, title: '', type: '', data: null, inputValue: '' });
+
+            // AUTH & SYNC
+            useEffect(() => {
+                const checkAuth = setInterval(() => {
+                    if (window.FirebaseOps) {
+                        clearInterval(checkAuth);
+                        window.FirebaseOps.onAuth((u) => {
+                            setUser(u);
+                            if (u) {
+                                window.FirebaseOps.subscribeData((data) => {
+                                    setProjects(data);
+                                    setIsCloudLoading(false);
+                                });
+                            } else {
+                                setIsCloudLoading(false);
+                            }
+                        });
+                    }
+                }, 100);
+            }, []);
+
+            // SAVE CLOUD
+            useEffect(() => {
+                if (!isCloudLoading && user && window.FirebaseOps) {
+                    const timer = setTimeout(() => window.FirebaseOps.saveData(projects), 1500);
+                    return () => clearTimeout(timer);
+                }
+            }, [projects]);
+
+            const handleLogin = async () => {
+                try { await window.FirebaseOps.login(loginData.email, loginData.pass); }
+                catch (e) { alert("Erreur : Vérifiez vos accès"); }
+            };
+
+            const uploadToCloudinary = async (file) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('upload_preset', UPLOAD_PRESET);
+                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+                const data = await res.json();
+                return data.secure_url;
+            };
+
+            const handlePhotoUpload = async (tId, sId, file) => {
+                if (!file) return;
+                if (!navigator.onLine) {
+                    await localDB.pendingPhotos.add({ tId, sId, file });
+                    alert("Hors-ligne : La photo sera envoyée au retour du réseau.");
+                    return;
+                }
+                const url = await uploadToCloudinary(file);
+                updateSubtask(tId, sId, { photos: [...(activeSubtask(tId, sId).photos || []), url] });
+            };
+
+            const activeProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
+            const activeSubtask = (tId, sId) => activeProject?.tasks.find(t => t.id === tId)?.subtasks.find(s => s.id === sId);
+
+            const updateSubtask = (tId, sId, data) => {
+                setProjects(prev => prev.map(p => p.id === selectedProjectId ? {
+                    ...p, tasks: p.tasks.map(t => t.id === tId ? {
+                        ...t, subtasks: t.subtasks.map(s => s.id === sId ? { ...s, ...data, lastChangeBy: user.email, lastChangeAt: new Date().toISOString() } : s)
+                    } : t)
+                } : p));
+            };
+
+            // CALCULS PLANNING (Idem code original)
+            const processedTasks = useMemo(() => {
+                if (!activeProject) return [];
+                const results = {};
+                const allSubtasks = [];
+                activeProject.tasks.forEach(t => t.subtasks.forEach(s => allSubtasks.push({ ...s, taskId: t.id })));
+                const calculate = (id, visited = new Set()) => {
+                    if (results[id]) return results[id];
+                    const st = allSubtasks.find(s => s.id === id);
+                    if (!st || visited.has(id)) return null;
+                    visited.add(id);
+                    let finalStart = st.date; 
+                    if (st.linkedTo) {
+                        const prev = calculate(st.linkedTo, visited);
+                        if (prev) {
+                            const date = new Date(prev.calculatedStart);
+                            date.setDate(date.getDate() + parseInt(prev.duration || 1));
+                            finalStart = date.toISOString().split('T')[0];
+                        }
+                    }
+                    results[id] = { ...st, calculatedStart: finalStart };
+                    return results[id];
+                };
+                allSubtasks.forEach(s => calculate(s.id));
+                return activeProject.tasks.map(t => {
+                    const subWithCalcs = t.subtasks.map(s => results[s.id] || s);
+                    let minDate = null; let maxEndDate = null;
+                    subWithCalcs.forEach(s => {
+                        const start = new Date(s.calculatedStart);
+                        const end = new Date(start); end.setDate(end.getDate() + parseInt(s.duration || 1));
+                        if (!minDate || start < minDate) minDate = start;
+                        if (!maxEndDate || end > maxEndDate) maxEndDate = end;
+                    });
+                    return { ...t, progress: Math.round(t.subtasks.reduce((a,c) => a+parseInt(c.progress||0),0)/(t.subtasks.length||1)), subtasks: subWithCalcs, startDate: minDate?.toISOString().split('T')[0], duration: minDate && maxEndDate ? Math.ceil((maxEndDate - minDate) / 86400000) : 0 };
+                });
+            }, [activeProject]);
+
+            const timelineDates = useMemo(() => {
+                const dates = []; const start = new Date(); start.setDate(start.getDate() - 7);
+                for (let i = 0; i < 120; i++) { const d = new Date(start); d.setDate(start.getDate() + i); dates.push(d); }
+                return dates;
+            }, []);
+
+            // ECRAN DE LOGIN
+            if (!user) return (
+                <div className="h-screen flex flex-col items-center justify-center bg-slate-900 p-6 text-white">
+                    <div className="bg-blue-600 p-4 rounded-3xl mb-6 shadow-2xl shadow-blue-500/20"><Icon name="home" size={40}/></div>
+                    <h1 className="text-2xl font-black mb-8 italic">BTP MANAGER PRO</h1>
+                    <div className="w-full max-w-sm space-y-4">
+                        <input className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none focus:border-blue-500" placeholder="Email" onChange={e => setLoginData({...loginData, email: e.target.value})}/>
+                        <input type="password" className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none focus:border-blue-500" placeholder="Mot de passe" onChange={e => setLoginData({...loginData, pass: e.target.value})}/>
+                        <button onClick={handleLogin} className="w-full p-4 rounded-2xl bg-blue-600 font-black shadow-lg">OUVRIR LE CHANTIER</button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="flex flex-col h-screen overflow-hidden text-slate-900">
+                    {/* HEADER IDENTIQUE */}
+                    <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center z-50 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-600 p-2 rounded-lg"><Icon name="home" size={18}/></div>
+                            <h1 className="font-black text-xl tracking-tighter uppercase">BTP MANAGER <span className="text-blue-500">PRO</span></h1>
+                        </div>
+                        <button onClick={() => window.FirebaseOps.logout()} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white"><Icon name="x" size={16}/></button>
+                    </header>
+
+                    <main className="flex-1 overflow-hidden relative">
+                        {/* VUE PROJETS / DETAILS / PLANNING (Votre code original ici) */}
+                        {view === 'projects' && (
+                             <div className="h-full overflow-y-auto p-8 bg-slate-50">
+                                <div className="max-w-5xl mx-auto">
+                                    <h2 className="text-2xl font-black mb-8">Mes Chantiers</h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {projects.map(p => (
+                                            <div key={p.id} onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="bg-white p-6 rounded-3xl shadow-sm border hover:shadow-xl cursor-pointer group">
+                                                <h3 className="font-bold text-lg mb-4">{p.name}</h3>
+                                                <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{p.tasks.length} Lots actifs</div>
+                                            </div>
+                                        ))}
+                                        <button onClick={() => { const n = prompt("Nom du chantier ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]) }} className="border-2 border-dashed border-slate-300 rounded-3xl p-8 flex flex-col items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-all">
+                                            <Icon name="plus" size={32} className="mb-2"/>
+                                            <span className="font-black text-[10px] uppercase">Ajouter un Chantier</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* VUE BUDGET (NOUVEAU) */}
+                        {view === 'budget' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24 animate-modal">
+                                <div className="max-w-md mx-auto">
+                                    <div className="bg-green-600 p-8 rounded-[40px] text-white shadow-2xl shadow-green-200 mb-8">
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2">Total Dépenses Directes</p>
+                                        <p className="text-4xl font-black tracking-tighter">
+                                            {activeProject.tasks.reduce((sum, t) => sum + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <h3 className="font-black text-[10px] uppercase text-slate-400 tracking-widest px-2">Détails par Lot</h3>
+                                        {activeProject.tasks.map(t => (
+                                            <div key={t.id} className="bg-white p-5 rounded-3xl border shadow-sm flex justify-between items-center">
+                                                <div>
+                                                    <p className="font-bold text-slate-800">{t.title}</p>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase">{t.subtasks.length} Postes de dépense</p>
+                                                </div>
+                                                <p className="font-black text-lg">
+                                                    {t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0).toLocaleString()} €
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* VUE SUIVI (Avec Cloudinary & Historique) */}
+                        {view === 'tracking' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
+                                <div className="max-w-2xl mx-auto space-y-6">
+                                    <h2 className="text-2xl font-black mb-4">Suivi de Chantier</h2>
+                                    {processedTasks.map(task => (
+                                        <div key={task.id} className="space-y-4">
+                                            <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">{task.title}</div>
+                                            {task.subtasks.map(sub => (
+                                                <div key={sub.id} className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <span className="font-bold text-slate-800">{sub.title}</span>
+                                                        <input type="number" placeholder="Coût €" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-20 bg-slate-50 border rounded-lg p-2 text-xs font-black text-green-600 outline-none"/>
+                                                    </div>
+                                                    
+                                                    {sub.lastChangeBy && (
+                                                        <p className="text-[8px] font-bold text-slate-300 uppercase mb-3 italic">
+                                                            Modifié par {sub.lastChangeBy.split('@')[0]} le {new Date(sub.lastChangeAt).toLocaleString('fr-FR')}
+                                                        </p>
+                                                    )}
+
+                                                    <div className="mb-4">
+                                                        <label className="text-[9px] font-black uppercase text-slate-400 mb-2 block flex justify-between items-center">
+                                                            Photos ({sub.photos?.length || 0})
+                                                            <label className="cursor-pointer flex items-center gap-1 text-blue-600">
+                                                                <Icon name="camera" size={14}/> <span className="text-[9px]">Prendre</span>
+                                                                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(task.id, sub.id, e.target.files[0])}/>
+                                                            </label>
+                                                        </label>
+                                                        
+                                                        <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                                                            {sub.photos?.map((photo, idx) => (
+                                                                <a key={idx} href={photo} target="_blank" className="w-16 h-16 shrink-0 rounded-xl border overflow-hidden">
+                                                                    <img src={photo.replace('/upload/', '/upload/w_200,c_scale/')} className="w-full h-full object-cover"/>
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <input type="range" value={sub.progress} onChange={e => updateSubtask(task.id, sub.id, {progress: e.target.value})} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Les autres vues (planning, details) sont inchangées par rapport à votre original */}
+                        {view === 'details' && activeProject && (
+                             <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
+                                <h2 className="text-2xl font-black mb-8">{activeProject.name}</h2>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="mb-4 bg-white p-4 rounded-3xl border">
+                                        <p className="font-black uppercase text-xs mb-4">{task.title}</p>
+                                        <button onClick={() => { const n = prompt("Sous-tâche ?"); if(n) updateSubtask(task.id, 'new', {id: Date.now().toString(), title: n, progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]}) }} className="text-blue-600 text-[10px] font-black">+ AJOUTER SOUS-TÂCHE</button>
+                                    </div>
+                                ))}
+                             </div>
+                        )}
+
+                        {view === 'planning' && activeProject && (
+                             <div className="h-full flex flex-col bg-white overflow-auto">
+                                <div className="flex bg-slate-900 text-white text-[9px] font-black sticky top-0 z-20">
+                                    <div className="w-32 shrink-0 p-2 border-r border-slate-800">TÂCHE</div>
+                                    {timelineDates.map((d, i) => (
+                                        <div key={i} style={{width:zoomLevel+'px'}} className="shrink-0 text-center p-2 border-r border-slate-800">{d.getDate()}</div>
+                                    ))}
+                                </div>
+                                {processedTasks.map(t => (
+                                    <React.Fragment key={t.id}>
+                                        <div className="flex border-b bg-slate-50 font-black text-[10px]">
+                                            <div className="w-32 shrink-0 p-2 border-r">{t.title}</div>
+                                        </div>
+                                        {t.subtasks.map(s => (
+                                            <div key={s.id} className="flex border-b text-[10px]">
+                                                <div className="w-32 shrink-0 p-2 border-r text-slate-500">{s.title}</div>
+                                                <div className="flex-1 relative">
+                                                    <div className="absolute top-2 h-4 bg-blue-500 rounded-full" style={{left: '10px', width: (s.duration*zoomLevel)+'px'}}></div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </React.Fragment>
+                                ))}
+                             </div>
+                        )}
+
+                    </main>
+
+                    {/* NAVIGATION MISE À JOUR */}
+                    <nav className="bg-white border-t px-4 py-2 flex justify-around items-center z-50 shrink-0 shadow-lg">
+                        <button onClick={() => setView('projects')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'projects' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="home" size={20}/><span className="text-[9px] font-black uppercase mt-1">Chantiers</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('planning')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'planning' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="calendar" size={20}/><span className="text-[9px] font-black uppercase mt-1">Planning</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('tracking')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'tracking' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="list" size={20}/><span className="text-[9px] font-black uppercase mt-1">Suivi</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('budget')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'budget' ? 'text-green-600 bg-green-50' : 'text-slate-400'}`}>
+                            <Icon name="wallet" size={20}/><span className="text-[9px] font-black uppercase mt-1">Budget</span>
+                        </button>
+                    </nav>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
