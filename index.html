@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BTP Manager Pro - FULL SHARED</title>
+    <title>BTP Manager Pro - VERSION FINALE</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -15,7 +15,7 @@
         .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .progress-blue { -webkit-appearance: none; appearance: none; height: 8px; background: #e2e8f0; border-radius: 10px; outline: none; }
-        .progress-blue::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background: #2563eb; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .progress-blue::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: #2563eb; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
         .sync-success { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
@@ -35,7 +35,7 @@
                 if (!window.initialLoadDone) return;
                 const { error } = await supabaseClient.from('btp_data').upsert({ 
                     id: 1, 
-                    content: JSON.stringify(data), 
+                    content: JSON.stringify(data),
                     lastUpdate: new Date().toISOString() 
                 });
                 if (error) console.error("Erreur sync:", error.message);
@@ -119,42 +119,43 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('upload_preset', UPLOAD_PRESET);
-                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
-                const data = await res.json();
-                const task = activeProject.tasks.find(t=>t.id===tId);
-                const sub = task.subtasks.find(s=>s.id===sId);
-                updateSub(tId, sId, { photos: [...(sub.photos || []), data.secure_url] });
+                try {
+                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+                    const result = await res.json();
+                    const task = activeProject.tasks.find(t=>t.id===tId);
+                    const sub = task.subtasks.find(s=>s.id===sId);
+                    updateSub(tId, sId, { photos: [...(sub.photos || []), result.secure_url] });
+                } catch (e) { alert("Erreur photo"); }
             };
 
             const timelineDates = useMemo(() => {
-                const dates = []; let c = new Date(); c.setDate(c.getDate() - 5);
-                for(let i=0; i<60; i++) { dates.push(new Date(c)); c.setDate(c.getDate() + 1); }
+                const dates = []; let c = new Date(); c.setDate(c.getDate() - 2);
+                for(let i=0; i<45; i++) { dates.push(new Date(c)); c.setDate(c.getDate() + 1); }
                 return dates;
             }, []);
 
             if (!user) return (
-                <div className="h-screen flex items-center justify-center bg-slate-900 p-6 text-center">
+                <div className="h-screen flex items-center justify-center bg-slate-900 p-6">
                     <button onClick={async () => {
                         const e = prompt("Email ?"); const p = prompt("Password ?");
                         const { data } = await supabaseClient.auth.signInWithPassword({ email: e, password: p });
                         if (data.user) setUser(data.user);
-                    }} className="bg-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest shadow-2xl">Ouvrir Session</button>
+                    }} className="bg-white px-10 py-5 rounded-3xl font-black uppercase shadow-2xl">Connexion</button>
                 </div>
             );
 
             return (
-                <div className="flex flex-col h-screen overflow-hidden">
+                <div className="flex flex-col h-screen overflow-hidden max-w-xl mx-auto bg-white shadow-2xl">
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 z-50">
                         <div>
                             <h1 className="font-black italic text-xs uppercase tracking-tighter">BTP Manager Pro</h1>
                             <div className="flex items-center mt-1">
                                 <span className={`status-dot ${isSyncing ? 'sync-loading' : 'sync-success'}`}></span>
-                                <span className="text-[8px] uppercase font-bold opacity-50">{isSyncing ? 'Synchro...' : 'Partagé'}</span>
+                                <span className="text-[8px] uppercase font-bold opacity-50">{isSyncing ? 'Synchronisation...' : 'Mode Partagé'}</span>
                             </div>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => setView('projects')} className="p-2 bg-white/10 rounded-xl"><Icon name="home" size={16}/></button>
-                            <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-2 bg-red-500/20 text-red-400 rounded-xl text-[8px] font-black uppercase px-3 tracking-widest">Sortir</button>
                         </div>
                     </header>
 
@@ -162,14 +163,14 @@
                         <div className="content-container p-6 pb-32">
                             {view === 'projects' && (
                                 <div className="space-y-4">
-                                    <h2 className="text-2xl font-black italic uppercase mb-6">Chantiers</h2>
+                                    <h2 className="text-2xl font-black italic uppercase mb-6 tracking-tighter">Mes Chantiers</h2>
                                     {projects.map(p => (
                                         <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center group">
                                             <span onClick={() => { setSelectedId(p.id); setView('details'); }} className="font-black uppercase flex-1 cursor-pointer">{p.name}</span>
                                             <button onClick={() => setProjects(projects.filter(proj => proj.id !== p.id))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={16}/></button>
                                         </div>
                                     ))}
-                                    <button onClick={() => { const n = prompt("Nom ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]); }} className="w-full p-8 border-2 border-dashed border-slate-200 rounded-[28px] text-slate-400 font-black uppercase text-[10px] tracking-widest">+ Nouveau Chantier</button>
+                                    <button onClick={() => { const n = prompt("Nom du chantier ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]); }} className="w-full p-8 border-2 border-dashed border-slate-200 rounded-[28px] text-slate-400 font-black uppercase text-[10px] tracking-widest">+ Nouveau Chantier</button>
                                 </div>
                             )}
 
@@ -195,43 +196,47 @@
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-[10px] font-bold bg-white outline-none shadow-sm"/>
-                                                        <input type="number" value={sub.duration} onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-[10px] font-bold bg-white text-center outline-none shadow-sm"/>
+                                                        <input type="number" value={sub.duration} onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-[10px] font-bold bg-white text-center outline-none shadow-sm" placeholder="Jrs"/>
                                                     </div>
                                                 </div>
                                             ))}
                                             <button onClick={() => { const n = prompt("Tâche ?"); if(n) updateSub(task.id, 'new', {id: Date.now().toString(), title: n, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, cost: 0, photos: []}); }} className="w-full py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[9px] uppercase tracking-widest">+ Ajouter Tâche</button>
                                         </div>
                                     ))}
-                                    <button onClick={() => { const n = prompt("Lot ?"); if(n) setProjects(projects.map(p => p.id === selectedId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: n, subtasks: []}]} : p)); }} className="w-full py-6 border-2 border-dashed border-blue-100 text-blue-600 rounded-[40px] font-black uppercase text-[10px] tracking-widest">+ Nouveau Lot</button>
+                                    <button onClick={() => { const n = prompt("Nom du Lot ?"); if(n) setProjects(projects.map(p => p.id === selectedId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: n, subtasks: []}]} : p)); }} className="w-full py-6 border-2 border-dashed border-blue-100 text-blue-600 rounded-[40px] font-black uppercase text-[10px] tracking-widest">+ Nouveau Lot</button>
                                 </div>
                             )}
 
                             {view === 'planning' && activeProject && (
                                 <div className="bg-white rounded-[32px] overflow-hidden border shadow-sm">
-                                    <div className="flex overflow-x-auto custom-scrollbar">
-                                        <div className="w-32 shrink-0 bg-slate-900 text-white p-3 text-[9px] font-black sticky left-0 z-10">Lots / Tâches</div>
+                                    <div className="flex overflow-x-auto custom-scrollbar bg-slate-900 text-white">
+                                        <div className="w-24 shrink-0 p-3 text-[8px] font-black uppercase sticky left-0 bg-slate-900 z-10">Lots</div>
                                         {timelineDates.map((d, i) => (
-                                            <div key={i} className="w-10 shrink-0 text-center py-3 border-r text-[8px] font-bold bg-slate-50">{d.getDate()}</div>
+                                            <div key={i} className="w-8 shrink-0 text-center py-3 border-r border-white/5 text-[7px] font-bold">{d.getDate()}/{d.getMonth()+1}</div>
                                         ))}
                                     </div>
-                                    {activeProject.tasks.map(task => (
-                                        <div key={task.id} className="border-b">
-                                            <div className="flex bg-slate-100/50 items-center">
-                                                <div className="w-32 shrink-0 p-3 text-[8px] font-black uppercase text-slate-400 truncate sticky left-0 bg-slate-100/90">{task.title}</div>
-                                            </div>
-                                            {task.subtasks.map(sub => {
-                                                const start = Math.floor((new Date(sub.date) - timelineDates[0])/(24*60*60*1000));
-                                                return (
-                                                    <div key={sub.id} className="flex items-center h-8 border-t border-slate-50 relative">
-                                                        <div className="w-32 shrink-0 px-3 text-[8px] font-medium text-slate-500 truncate sticky left-0 bg-white/95 z-10">{sub.title}</div>
-                                                        <div className="absolute h-3 bg-blue-500 rounded-full" style={{left: (128 + start * 10)+'px', width: (sub.duration * 10)+'px'}}>
-                                                            <div className="h-full bg-green-400 rounded-full" style={{width: (sub.progress || 0)+'%'}}></div>
+                                    <div className="max-h-[60vh] overflow-y-auto">
+                                        {activeProject.tasks.map(task => (
+                                            <div key={task.id} className="border-b">
+                                                <div className="flex bg-slate-100/50 items-center border-b border-slate-100">
+                                                    <div className="w-24 shrink-0 p-3 text-[7px] font-black uppercase text-slate-400 truncate sticky left-0 bg-slate-100/90">{task.title}</div>
+                                                </div>
+                                                {task.subtasks.map(sub => {
+                                                    const start = Math.floor((new Date(sub.date) - timelineDates[0])/(24*60*60*1000));
+                                                    return (
+                                                        <div key={sub.id} className="flex items-center h-8 border-t border-slate-50 relative">
+                                                            <div className="w-24 shrink-0 px-3 text-[7px] font-medium text-slate-500 truncate sticky left-0 bg-white/95 z-10">{sub.title}</div>
+                                                            <div className="absolute h-3 bg-blue-500/20 rounded-full" style={{left: (96 + start * 32)+'px', width: (sub.duration * 32)+'px'}}>
+                                                                <div className="h-full bg-blue-600 rounded-full relative" style={{width: (sub.progress || 0)+'%'}}>
+                                                                    <span className="absolute -top-3 left-0 text-[6px] font-black text-blue-600">{sub.progress}%</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ))}
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 
@@ -241,7 +246,7 @@
                                     {activeProject.tasks.map(task => task.subtasks.map(sub => (
                                         <div key={sub.id} className="bg-white p-6 rounded-[32px] border shadow-sm mb-4">
                                             <div className="flex justify-between items-center mb-6">
-                                                <div>
+                                                <div className="flex-1">
                                                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{task.title}</p>
                                                     <p className="font-bold text-sm">{sub.title}</p>
                                                 </div>
@@ -252,13 +257,15 @@
                                             </div>
                                             <div className="space-y-2 mb-4">
                                                 <div className="flex justify-between text-[10px] font-black text-blue-600 uppercase">
-                                                    <span>Avancement</span>
+                                                    <span>Progression</span>
                                                     <span>{sub.progress || 0}%</span>
                                                 </div>
                                                 <input type="range" value={sub.progress || 0} onChange={e => updateSub(task.id, sub.id, {progress: e.target.value})} className="progress-blue w-full"/>
                                             </div>
                                             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                                                {sub.photos?.map((url, i) => <img key={i} src={url} className="w-16 h-16 rounded-xl object-cover shadow-md border-2 border-white"/>)}
+                                                {sub.photos?.map((url, i) => (
+                                                    <img key={i} src={url} className="w-20 h-20 rounded-xl object-cover shadow-md border-2 border-white shrink-0"/>
+                                                ))}
                                             </div>
                                         </div>
                                     )))}
@@ -267,9 +274,10 @@
 
                             {view === 'budget' && activeProject && (
                                 <div className="space-y-6">
-                                    <div className="bg-slate-900 text-white p-8 rounded-[40px] text-center shadow-2xl">
-                                        <p className="text-[10px] font-black uppercase opacity-40 mb-2 tracking-widest">Budget Total</p>
-                                        <p className="text-4xl font-black">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
+                                    <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
+                                        <p className="text-[10px] font-black uppercase opacity-40 mb-2 tracking-widest">Coût Total Chantier</p>
+                                        <p className="text-4xl font-black tracking-tighter">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
                                     </div>
                                     {activeProject.tasks.map(task => (
                                         <div key={task.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
@@ -277,7 +285,10 @@
                                             {task.subtasks.map(sub => (
                                                 <div key={sub.id} className="flex justify-between items-center py-4 border-t border-slate-50">
                                                     <span className="text-xs font-bold">{sub.title}</span>
-                                                    <input type="number" value={sub.cost || ''} onChange={e => updateSub(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl text-xs text-right font-black text-blue-600 outline-none" placeholder="0 €"/>
+                                                    <div className="flex items-center gap-2">
+                                                        <input type="number" value={sub.cost || ''} onChange={e => updateSub(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl text-xs text-right font-black text-blue-600 outline-none" placeholder="0"/>
+                                                        <span className="text-[10px] font-bold text-slate-400">€</span>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -288,7 +299,7 @@
                     </main>
 
                     {selectedId && (
-                        <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
+                        <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
                             {[
                                 {id: 'details', icon: 'edit', label: 'Lots'},
                                 {id: 'planning', icon: 'calendar', label: 'Gantt'},
@@ -296,7 +307,8 @@
                                 {id: 'budget', icon: 'wallet', label: 'Coûts'}
                             ].map(item => (
                                 <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center flex-1 transition-all ${view === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
-                                    <Icon name={item.icon} size={22}/><span className="text-[8px] font-black uppercase mt-1">{item.label}</span>
+                                    <Icon name={item.icon} size={22}/>
+                                    <span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
                                 </button>
                             ))}
                         </nav>
