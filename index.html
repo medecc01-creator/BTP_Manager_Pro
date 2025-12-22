@@ -3,22 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BTP Manager Pro</title>
+    <title>BTP Manager Pro - Shared</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/></svg>">
     
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     
     <style>
-        body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; color: #0f172a; }
         .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .content-container { width: 100%; max-width: 550px; margin: 0 auto; }
+        .content-container { width: 100%; max-width: 600px; margin: 0 auto; }
         .progress-blue { -webkit-appearance: none; appearance: none; height: 10px; background: #e2e8f0; border-radius: 10px; outline: none; }
         .progress-blue::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: #2563eb; border-radius: 50%; cursor: pointer; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .modal-overlay { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); }
@@ -34,22 +32,29 @@
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         window.DatabaseOps = {
-            saveData: async (data, userId) => {
-                if (!userId) return;
-                await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), user_id: userId, lastUpdate: new Date().toISOString() });
+            saveData: async (data) => {
+                const { error } = await supabaseClient.from('btp_data').upsert({ 
+                    id: 1, 
+                    content: JSON.stringify(data), 
+                    lastUpdate: new Date().toISOString() 
+                });
+                if (error) console.error("Erreur sync:", error.message);
             },
-            subscribeData: (userId, callback) => {
-                supabaseClient.from('btp_data').select('content').eq('user_id', userId).eq('id', 1).single()
+            subscribeData: (callback) => {
+                supabaseClient.from('btp_data').select('content').eq('id', 1).single()
                     .then(({ data }) => { if (data) callback(JSON.parse(data.content)); else callback([]); });
-                const channel = supabaseClient.channel('db-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'btp_data', filter: `user_id=eq.${userId}` }, 
-                    payload => { if(payload.new) callback(JSON.parse(payload.new.content)); }).subscribe();
+                
+                const channel = supabaseClient.channel('global-sync').on('postgres_changes', 
+                    { event: '*', schema: 'public', table: 'btp_data', filter: 'id=eq.1' }, 
+                    payload => { if(payload.new) callback(JSON.parse(payload.new.content)); }
+                ).subscribe();
                 return () => supabaseClient.removeChannel(channel);
             }
         };
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
 
@@ -74,7 +79,7 @@
             const handleAuth = async () => {
                 setLoading(true);
                 const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-                if (error) alert("Erreur : " + error.message);
+                if (error) alert("Identifiants incorrects");
                 else if (data.user) onLogin(data.user);
                 setLoading(false);
             };
@@ -82,10 +87,10 @@
                 <div className="h-screen flex items-center justify-center bg-slate-900 p-6">
                     <div className="bg-white p-10 rounded-[40px] w-full max-w-sm shadow-2xl text-center">
                         <div className="flex justify-center text-slate-900 mb-6 scale-150"><Icon name="home" size={32} /></div>
-                        <h2 className="font-black uppercase italic mb-8 tracking-tighter text-2xl">Accès Privé</h2>
-                        <input type="email" placeholder="Email" className="w-full p-4 bg-slate-50 rounded-2xl mb-3 outline-none font-bold text-slate-700" onChange={e => setEmail(e.target.value)} />
-                        <input type="password" placeholder="Mot de passe" className="w-full p-4 bg-slate-50 rounded-2xl mb-6 outline-none font-bold text-slate-700" onChange={e => setPassword(e.target.value)} />
-                        <button onClick={handleAuth} disabled={loading} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-transform">{loading ? '...' : 'Connexion'}</button>
+                        <h2 className="font-black uppercase italic mb-8 tracking-tighter text-2xl">BTP Manager</h2>
+                        <input type="email" placeholder="Email" className="w-full p-4 bg-slate-50 rounded-2xl mb-3 outline-none font-bold" onChange={e => setEmail(e.target.value)} />
+                        <input type="password" placeholder="Mot de passe" className="w-full p-4 bg-slate-50 rounded-2xl mb-6 outline-none font-bold" onChange={e => setPassword(e.target.value)} />
+                        <button onClick={handleAuth} disabled={loading} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest">{loading ? 'Connexion...' : 'Entrer'}</button>
                     </div>
                 </div>
             );
@@ -100,6 +105,7 @@
             const [zoomLevel, setZoomLevel] = useState(30);
             const [modal, setModal] = useState({ show: false, title: '', value: '', onConfirm: null, isConfirm: false });
             const [fullImg, setFullImg] = useState(null);
+            const isFirstLoad = useRef(true);
 
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
@@ -109,11 +115,17 @@
             }, []);
 
             useEffect(() => {
-                if (user) return window.DatabaseOps.subscribeData(user.id, setProjects);
+                if (user) return window.DatabaseOps.subscribeData((data) => {
+                    setProjects(data || []);
+                    isFirstLoad.current = false;
+                });
             }, [user]);
 
             useEffect(() => {
-                if (user && !isLoading) window.DatabaseOps.saveData(projects, user.id);
+                if (user && !isLoading && !isFirstLoad.current) {
+                    const timer = setTimeout(() => { window.DatabaseOps.saveData(projects); }, 800);
+                    return () => clearTimeout(timer);
+                }
             }, [projects]);
 
             const activeProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
@@ -126,19 +138,16 @@
                 } : p));
             };
 
-            const linkToPreviousTask = (taskId, subtaskIndex) => {
-                if (subtaskIndex === 0) return alert("C'est la première tâche du lot.");
+            const linkToPreviousTask = (taskId, subIndex) => {
+                if (subIndex === 0) return alert("C'est la première tâche !");
                 const task = activeProject.tasks.find(t => t.id === taskId);
-                const prevSub = task.subtasks[subtaskIndex - 1];
-                
-                const prevDate = new Date(prevSub.date);
-                prevDate.setDate(prevDate.getDate() + parseInt(prevSub.duration || 0));
-                
-                const newDateStr = prevDate.toISOString().split('T')[0];
-                updateSubtask(taskId, task.subtasks[subtaskIndex].id, { date: newDateStr });
+                const prev = task.subtasks[subIndex - 1];
+                const date = new Date(prev.date);
+                date.setDate(date.getDate() + parseInt(prev.duration || 0));
+                updateSubtask(taskId, task.subtasks[subIndex].id, { date: date.toISOString().split('T')[0] });
             };
 
-            const handlePhotoUpload = async (tId, sId, file) => {
+            const handlePhoto = async (tId, sId, file) => {
                 if (!file) return;
                 const formData = new FormData();
                 formData.append('file', file);
@@ -146,50 +155,51 @@
                 try {
                     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
                     const data = await res.json();
-                    const photos = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId).photos || [];
-                    updateSubtask(tId, sId, { photos: [...photos, data.secure_url] });
-                } catch (e) { alert("Erreur d'envoi"); }
+                    const task = activeProject.tasks.find(t=>t.id===tId);
+                    const sub = task.subtasks.find(s=>s.id===sId);
+                    updateSubtask(tId, sId, { photos: [...(sub.photos || []), data.secure_url] });
+                } catch (e) { alert("Erreur photo"); }
             };
 
             const timelineDates = useMemo(() => {
-                const dates = []; let curr = new Date(); curr.setDate(curr.getDate() - 5);
-                for(let i=0; i<100; i++) { dates.push(new Date(curr)); curr.setDate(curr.getDate() + 1); }
+                const dates = []; let c = new Date(); c.setDate(c.getDate() - 10);
+                for(let i=0; i<120; i++) { dates.push(new Date(c)); c.setDate(c.getDate() + 1); }
                 return dates;
             }, []);
 
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-slate-300">Sync...</div>;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black animate-pulse">CHARGEMENT...</div>;
             if (!user) return <Login onLogin={setUser} />;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
                     {fullImg && (
-                        <div className="fixed inset-0 z-[200] full-img-overlay flex items-center justify-center p-4 animate-in fade-in" onClick={() => setFullImg(null)}>
-                            <button className="absolute top-8 right-8 text-white bg-white/10 p-4 rounded-full backdrop-blur-md border border-white/20"><Icon name="close" size={24}/></button>
-                            <img src={fullImg} className="max-w-full max-h-[85vh] rounded-3xl shadow-2xl object-contain border border-white/10" />
+                        <div className="fixed inset-0 z-[200] full-img-overlay flex items-center justify-center p-4" onClick={() => setFullImg(null)}>
+                            <img src={fullImg} className="max-w-full max-h-[90vh] rounded-3xl object-contain border border-white/10 shadow-2xl" />
                         </div>
                     )}
 
                     {modal.show && (
                         <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-6">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-900">
                                 <h3 className="text-xl font-black italic uppercase mb-4">{modal.title}</h3>
                                 {!modal.isConfirm ? (
-                                    <input autoFocus className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 ring-blue-500 font-bold mb-6" value={modal.value} onChange={e => setModal({...modal, value: e.target.value})} />
-                                ) : (
-                                    <p className="text-slate-400 font-medium text-sm mb-8">Supprimer définitivement ?</p>
-                                )}
+                                    <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold mb-6" value={modal.value} onChange={e => setModal({...modal, value: e.target.value})} />
+                                ) : <p className="mb-8 opacity-60">Confirmer la suppression ?</p>}
                                 <div className="flex gap-3">
-                                    <button onClick={() => setModal({show:false})} className="flex-1 py-4 font-black uppercase text-[10px] text-slate-400 bg-slate-100 rounded-2xl tracking-widest">Annuler</button>
-                                    <button onClick={() => { modal.onConfirm(modal.value); setModal({show:false}); }} className={`flex-1 py-4 font-black uppercase text-[10px] text-white rounded-2xl shadow-lg ${modal.isConfirm ? 'bg-red-500' : 'bg-slate-900'}`}>Valider</button>
+                                    <button onClick={() => setModal({show:false})} className="flex-1 py-4 font-black uppercase text-[10px] bg-slate-100 rounded-2xl">Annuler</button>
+                                    <button onClick={() => { modal.onConfirm(modal.value); setModal({show:false}); }} className={`flex-1 py-4 font-black uppercase text-[10px] text-white rounded-2xl ${modal.isConfirm ? 'bg-red-500' : 'bg-slate-900'}`}>OK</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 z-50">
-                        <h1 className="font-black italic uppercase tracking-tighter text-xs">BTP MANAGER PRO</h1>
+                        <div className="flex items-center gap-3">
+                            <div className="scale-75"><Icon name="home" /></div>
+                            <h1 className="font-black italic uppercase tracking-tighter text-xs">BTP MANAGER PRO</h1>
+                        </div>
                         <div className="flex gap-2">
-                            <button onClick={() => setView('projects')} className="p-2 bg-white/10 rounded-full"><Icon name="home" size={18}/></button>
+                            <button onClick={() => setView('projects')} className="p-2 bg-white/10 rounded-full"><Icon name="home" size={16}/></button>
                             <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-2 bg-red-500/20 text-red-400 rounded-full text-[8px] font-black uppercase px-3">Sortir</button>
                         </div>
                     </header>
@@ -198,43 +208,43 @@
                         {view === 'projects' && (
                             <div className="p-6 h-full overflow-y-auto">
                                 <div className="content-container space-y-4">
-                                    <h2 className="text-2xl font-black italic mb-6 uppercase text-slate-900 tracking-tighter">Mes Chantiers</h2>
+                                    <h2 className="text-2xl font-black italic mb-6 uppercase tracking-tighter">Mes Chantiers</h2>
                                     {projects.map(p => (
-                                        <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center active:scale-95 transition-transform">
-                                            <span onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="font-black uppercase text-slate-800 flex-1 cursor-pointer truncate mr-4">{p.name}</span>
-                                            <div className="flex gap-2 text-slate-200">
+                                        <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                            <span onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="font-black uppercase flex-1 cursor-pointer truncate mr-4">{p.name}</span>
+                                            <div className="flex gap-2 text-slate-300">
                                                 <button onClick={() => setModal({show:true, title:"Renommer", value:p.name, onConfirm:(v)=>setProjects(prev=>prev.map(proj=>proj.id===p.id?{...proj, name:v}:proj))})}><Icon name="edit" size={16}/></button>
                                                 <button onClick={() => setModal({show:true, title:"Supprimer ?", isConfirm:true, onConfirm:()=>setProjects(projects.filter(proj=>proj.id!==p.id))})}><Icon name="trash" size={16}/></button>
                                             </div>
                                         </div>
                                     ))}
-                                    <button onClick={() => setModal({show:true, title:"Nouveau Projet", value:"", onConfirm:(v)=>setProjects([...projects, {id:Date.now().toString(), name:v, tasks:[]}])})} className="w-full p-8 border-2 border-dashed border-slate-200 rounded-[28px] text-slate-400 font-black uppercase text-[10px] tracking-widest">+ Nouveau Projet</button>
+                                    <button onClick={() => setModal({show:true, title:"Nouveau Chantier", value:"", onConfirm:(v)=>setProjects([...projects, {id:Date.now().toString(), name:v, tasks:[]}])})} className="w-full p-8 border-2 border-dashed border-slate-200 rounded-[28px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:border-blue-400 hover:text-blue-400 transition-all">+ Nouveau Chantier</button>
                                 </div>
                             </div>
                         )}
 
                         {view === 'details' && activeProject && (
                             <div className="p-6 overflow-y-auto h-full pb-32">
-                                <div className="content-container space-y-6 text-slate-900">
-                                    <h2 className="text-xl font-black italic uppercase tracking-tighter">{activeProject.name}</h2>
+                                <div className="content-container space-y-6">
+                                    <h2 className="text-xl font-black italic uppercase tracking-tighter mb-4">{activeProject.name}</h2>
                                     {activeProject.tasks.map(task => (
-                                        <div key={task.id} className="bg-white p-5 rounded-[32px] border shadow-sm border-slate-100">
+                                        <div key={task.id} className="bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm mb-6">
                                             <div className="flex justify-between items-center mb-4 px-2">
-                                                <p onClick={() => setModal({show:true, title:"Lot", value:task.title, onConfirm:(v)=>setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.map(t=>t.id===task.id?{...t, title:v}:t)}:p))})} className="font-black text-[9px] uppercase text-slate-300 tracking-[0.2em] cursor-pointer">{task.title}</p>
-                                                <button onClick={() => setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.filter(t=>t.id!==task.id)}:p))} className="text-slate-200"><Icon name="trash" size={14}/></button>
+                                                <p className="font-black text-[9px] uppercase text-slate-300 tracking-[0.2em]">{task.title}</p>
+                                                <button onClick={() => setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.filter(t=>t.id!==task.id)}:p))} className="text-slate-200 hover:text-red-400"><Icon name="trash" size={14}/></button>
                                             </div>
                                             {task.subtasks.map((sub, idx) => (
-                                                <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl mb-3 border border-slate-100 relative overflow-hidden">
+                                                <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl mb-3 border border-slate-100">
                                                     <div className="flex justify-between items-center mb-3">
-                                                        <span onClick={() => setModal({show:true, title:"Tâche", value:sub.title, onConfirm:(v)=>updateSubtask(task.id, sub.id, {title:v})})} className="font-bold text-xs cursor-pointer">{sub.title}</span>
-                                                        <div className="flex gap-2 text-slate-200">
-                                                            <button onClick={() => linkToPreviousTask(task.id, idx)} className="hover:text-blue-500 transition-colors"><Icon name="link" size={12}/></button>
-                                                            <button onClick={() => setProjects(prev => prev.map(p => p.id === selectedProjectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, subtasks: t.subtasks.filter(s => s.id !== sub.id)} : t)} : p))}><Icon name="trash" size={12}/></button>
+                                                        <span className="font-bold text-xs" onClick={() => setModal({show:true, title:"Tâche", value:sub.title, onConfirm:(v)=>updateSubtask(task.id, sub.id, {title:v})})}>{sub.title}</span>
+                                                        <div className="flex gap-2 text-slate-300">
+                                                            <button onClick={() => linkToPreviousTask(task.id, idx)} className="hover:text-blue-500"><Icon name="link" size={14}/></button>
+                                                            <button onClick={() => setProjects(prev => prev.map(p => p.id === selectedProjectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, subtasks: t.subtasks.filter(s => s.id !== sub.id)} : t)} : p))}><Icon name="trash" size={14}/></button>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-[10px] font-bold border-none bg-white shadow-inner outline-none"/>
-                                                        <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-[10px] font-bold border-none bg-white text-center shadow-inner outline-none" placeholder="Jrs"/>
+                                                        <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-[10px] font-bold bg-white shadow-sm outline-none"/>
+                                                        <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-[10px] font-bold bg-white text-center shadow-sm outline-none" placeholder="Jrs"/>
                                                     </div>
                                                 </div>
                                             ))}
@@ -247,49 +257,37 @@
                         )}
 
                         {view === 'planning' && activeProject && (
-                            <div className="h-full flex flex-col bg-white overflow-hidden">
-                                <div className="p-4 border-b bg-slate-50 flex items-center justify-between shrink-0 text-[10px] font-black uppercase tracking-widest italic text-slate-400">
-                                    <span>Gantt Zoom</span>
+                            <div className="h-full flex flex-col bg-white">
+                                <div className="p-4 border-b bg-slate-50 flex items-center justify-between shrink-0 text-[10px] font-black italic text-slate-400">
+                                    <span>ZOOM GANTT</span>
                                     <input type="range" min="15" max="80" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} className="w-32"/>
                                 </div>
                                 <div className="flex-1 overflow-auto custom-scrollbar relative">
                                     <div className="inline-block min-w-full">
-                                        <div className="flex sticky top-0 z-40 bg-slate-900 text-white text-[8px] font-black uppercase italic">
+                                        <div className="flex sticky top-0 z-40 bg-slate-900 text-white text-[8px] font-black uppercase">
                                             <div className="w-32 shrink-0 p-4 sticky left-0 z-50 bg-slate-900 border-r border-slate-800">Éléments</div>
-                                            <div className="flex flex-col">
-                                                <div className="flex border-b border-slate-800">
-                                                    {timelineDates.filter(d => d.getDate() === 1 || timelineDates.indexOf(d) === 0).map((d, i) => (
-                                                        <div key={i} className="px-2 py-1 border-r border-slate-800 truncate" style={{ minWidth: (zoomLevel * 10) + 'px' }}>
-                                                            {d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                                <div className="flex">
-                                                    {timelineDates.map((d, i) => (
-                                                        <div key={i} style={{ width: zoomLevel + 'px' }} className={`shrink-0 text-center py-2 border-r border-slate-800 ${[0,6].includes(d.getDay()) ? 'bg-slate-800' : ''}`}>
-                                                            {d.getDate()}
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                            <div className="flex">
+                                                {timelineDates.map((d, i) => (
+                                                    <div key={i} style={{ width: zoomLevel + 'px' }} className={`shrink-0 text-center py-2 border-r border-slate-800 ${[0,6].includes(d.getDay()) ? 'bg-slate-800' : ''}`}>
+                                                        {d.getDate()}
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                         {activeProject.tasks.map(task => (
-                                            <div key={task.id} className="border-b border-slate-100">
-                                                <div className="flex bg-blue-50/30 h-8 items-center font-black uppercase italic text-[8px] text-blue-600">
-                                                    <div className="w-32 shrink-0 px-4 sticky left-0 z-30 bg-blue-50/80 border-r truncate">{task.title}</div>
+                                            <div key={task.id}>
+                                                <div className="flex bg-blue-50/50 h-6 items-center font-black uppercase italic text-[8px] text-blue-600 border-b border-blue-100">
+                                                    <div className="w-32 shrink-0 px-4 sticky left-0 z-30 bg-blue-50/90 border-r truncate">{task.title}</div>
                                                 </div>
                                                 {task.subtasks.map(sub => {
-                                                    const d = new Date(sub.date); 
-                                                    const start = Math.floor((d - timelineDates[0])/(24*60*60*1000));
+                                                    const start = Math.floor((new Date(sub.date) - timelineDates[0])/(24*60*60*1000));
                                                     return (
-                                                        <div key={sub.id} className="flex h-8 items-center border-b border-slate-50 last:border-0 text-[9px]">
-                                                            <div className="w-32 shrink-0 px-4 pl-6 sticky left-0 z-30 bg-white border-r text-slate-500 truncate font-medium">{sub.title}</div>
+                                                        <div key={sub.id} className="flex h-8 items-center border-b border-slate-50 relative">
+                                                            <div className="w-32 shrink-0 px-4 pl-6 sticky left-0 z-30 bg-white border-r text-[9px] text-slate-500 truncate font-medium">{sub.title}</div>
                                                             <div className="flex-1 relative h-full flex items-center">
-                                                                <div className="absolute h-4 bg-slate-100 rounded-full overflow-hidden flex shadow-sm" style={{ left: (start * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px' }}>
-                                                                    <div className="h-full bg-green-500" style={{ width: (sub.progress || 0) + '%' }}></div>
-                                                                    <div className="h-full bg-blue-500 flex-1"></div>
+                                                                <div className="absolute h-4 bg-blue-500 rounded-full shadow-sm overflow-hidden" style={{ left: (start * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px' }}>
+                                                                    <div className="h-full bg-green-400 transition-all" style={{ width: (sub.progress || 0) + '%' }}></div>
                                                                 </div>
-                                                                <span className="absolute text-[7px] font-black text-slate-900 ml-1" style={{ left: (start * zoomLevel + sub.duration * zoomLevel + 5) + 'px' }}>{sub.progress || 0}%</span>
                                                             </div>
                                                         </div>
                                                     )
@@ -304,17 +302,17 @@
                         {view === 'tracking' && activeProject && (
                             <div className="p-6 overflow-y-auto h-full pb-32">
                                 <div className="content-container space-y-8">
-                                    <h2 className="text-2xl font-black italic uppercase text-slate-900 leading-none mb-2">Suivi</h2>
+                                    <h2 className="text-2xl font-black italic uppercase">Suivi Chantier</h2>
                                     {activeProject.tasks.map(task => (
                                         <div key={task.id}>
-                                            <p className="text-[10px] font-black uppercase text-slate-300 mb-4 tracking-[0.2em]">{task.title}</p>
+                                            <p className="text-[10px] font-black uppercase text-slate-300 mb-4 tracking-widest">{task.title}</p>
                                             {task.subtasks.map(sub => (
                                                 <div key={sub.id} className="bg-white p-6 rounded-[32px] border border-slate-100 mb-4 shadow-sm">
                                                     <div className="flex justify-between items-center mb-6">
-                                                        <p className="font-bold text-sm text-slate-800">{sub.title}</p>
-                                                        <label className="cursor-pointer text-blue-600 bg-blue-50 p-3 rounded-2xl active:scale-90 transition-transform shadow-inner">
+                                                        <p className="font-bold text-sm">{sub.title}</p>
+                                                        <label className="cursor-pointer text-blue-600 bg-blue-50 p-3 rounded-2xl active:scale-95 shadow-inner">
                                                             <Icon name="camera" size={24}/>
-                                                            <input type="file" accept="image/*" capture="camera" className="hidden" onChange={e => handlePhotoUpload(task.id, sub.id, e.target.files[0])}/>
+                                                            <input type="file" accept="image/*" capture="camera" className="hidden" onChange={e => handlePhoto(task.id, sub.id, e.target.files[0])}/>
                                                         </label>
                                                     </div>
                                                     <div className="space-y-2 mb-6">
@@ -326,9 +324,7 @@
                                                     </div>
                                                     <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
                                                         {sub.photos?.map((p, i) => (
-                                                            <div key={i} className="relative shrink-0" onClick={() => setFullImg(p)}>
-                                                                <img src={p} className="w-20 h-20 rounded-2xl object-cover shadow-lg border border-white transition-transform active:scale-95 cursor-zoom-in"/>
-                                                            </div>
+                                                            <img key={i} src={p} onClick={() => setFullImg(p)} className="w-20 h-20 rounded-2xl object-cover shadow-lg border-2 border-white flex-shrink-0 cursor-zoom-in"/>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -341,9 +337,9 @@
 
                         {view === 'budget' && activeProject && (
                             <div className="p-6 overflow-y-auto h-full pb-32">
-                                <div className="content-container space-y-6 text-center text-slate-900">
-                                    <div className="bg-slate-900 text-white p-10 rounded-[40px] shadow-2xl relative overflow-hidden">
-                                        <p className="text-[10px] font-black uppercase opacity-50 mb-2 italic tracking-widest">Dépenses Totales</p>
+                                <div className="content-container space-y-6">
+                                    <div className="bg-slate-900 text-white p-10 rounded-[40px] shadow-2xl text-center">
+                                        <p className="text-[10px] font-black uppercase opacity-50 mb-2 italic tracking-widest">Coût Total Projet</p>
                                         <p className="text-4xl font-black">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
                                     </div>
                                     {activeProject.tasks.map(task => (
@@ -352,7 +348,7 @@
                                             {task.subtasks.map(sub => (
                                                 <div key={sub.id} className="flex justify-between items-center py-4 border-t border-slate-50">
                                                     <span className="text-xs font-bold text-slate-600">{sub.title}</span>
-                                                    <input type="number" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl border-none text-xs text-right font-black text-blue-600 outline-none" placeholder="0 €"/>
+                                                    <input type="number" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl text-xs text-right font-black text-blue-600 outline-none" placeholder="0 €"/>
                                                 </div>
                                             ))}
                                         </div>
@@ -363,16 +359,16 @@
                     </main>
 
                     {selectedProjectId && (
-                        <nav className="bg-white/80 backdrop-blur-xl border-t p-4 pb-10 flex justify-around shrink-0 rounded-t-[40px] shadow-2xl z-50">
+                        <nav className="bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
                             {[
-                                {id: 'details', icon: 'edit', label: 'Lots'},
-                                {id: 'planning', icon: 'calendar', label: 'Gantt'},
-                                {id: 'tracking', icon: 'camera', label: 'Suivi'},
-                                {id: 'budget', icon: 'wallet', label: 'Finance'}
+                                {id: 'details', icon: 'edit', label: 'LOTS'},
+                                {id: 'planning', icon: 'calendar', label: 'GANTT'},
+                                {id: 'tracking', icon: 'SUIVI', icon: 'camera', label: 'SUIVI'},
+                                {id: 'budget', icon: 'wallet', label: 'COÛTS'}
                             ].map(item => (
                                 <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center flex-1 transition-all ${view === item.id ? 'text-blue-600 scale-110 font-bold' : 'text-slate-300'}`}>
-                                    <Icon name={item.icon} size={22}/>
-                                    <span className="text-[8px] uppercase mt-1 tracking-tighter">{item.label}</span>
+                                    <Icon name={item.icon} size={20}/>
+                                    <span className="text-[7px] font-black mt-1 tracking-widest">{item.label}</span>
                                 </button>
                             ))}
                         </nav>
