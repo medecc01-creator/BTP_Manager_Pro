@@ -12,16 +12,29 @@
     <style>
         body { background-color: #f1f5f9; font-family: system-ui; -webkit-tap-highlight-color: transparent; overflow: hidden; }
         
-        /* Barre de défilement personnalisée et visible */
-        .custom-scrollbar-h { overflow-x: auto !important; scrollbar-width: auto; scrollbar-color: #2563eb #f1f5f9; }
-        .custom-scrollbar-h::-webkit-scrollbar { height: 12px !important; display: block !important; }
-        .custom-scrollbar-h::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
-        .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 3px solid #f1f5f9; }
+        /* BARRE DE DEFILEMENT ULTRA-VISIBLE */
+        .custom-scrollbar-h { 
+            overflow-x: auto !important; 
+            -webkit-overflow-scrolling: touch;
+        }
+        .custom-scrollbar-h::-webkit-scrollbar { 
+            height: 14px !important; 
+            display: block !important; 
+        }
+        .custom-scrollbar-h::-webkit-scrollbar-track { 
+            background: #e2e8f0; 
+            border-radius: 0px; 
+        }
+        .custom-scrollbar-h::-webkit-scrollbar-thumb { 
+            background: #2563eb; 
+            border-radius: 10px; 
+            border: 2px solid #e2e8f0;
+        }
         
         .sticky-col { 
             position: sticky; 
             left: 0; 
-            z-index: 40; 
+            z-index: 45; 
             background: white; 
             box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1);
         }
@@ -145,25 +158,24 @@
             }, [activeProject]);
 
             if (!user) return (
-                <div className="h-screen flex items-center justify-center bg-slate-900 p-6">
-                    <form onSubmit={(e) => { e.preventDefault(); supabaseClient.auth.signInWithPassword(loginData).then(({data, error}) => error ? alert(error.message) : setUser(data.user)); }} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6 text-center">
+                <div className="h-screen flex items-center justify-center bg-slate-900 p-6 text-center">
+                    <form onSubmit={(e) => { e.preventDefault(); supabaseClient.auth.signInWithPassword(loginData).then(({data, error}) => error ? alert(error.message) : setUser(data.user)); }} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6">
                         <h2 className="text-3xl font-black uppercase italic tracking-tighter text-slate-800">BTP Manager Pro</h2>
                         <input type="email" placeholder="Email" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold" onChange={e => setLoginData({...loginData, email: e.target.value})}/>
                         <input type="password" placeholder="Mot de passe" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold" onChange={e => setLoginData({...loginData, password: e.target.value})}/>
-                        <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-transform shadow-lg shadow-blue-200">Connexion</button>
+                        <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-200">Connexion</button>
                     </form>
                 </div>
             );
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
-                    {/* EN-TETE */}
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50">
                         <div className="flex flex-col">
                             <h1 className="font-black italic text-xs uppercase tracking-tighter">BTP Manager Pro</h1>
                             <div className="flex items-center mt-0.5">
                                 <span className={`status-dot ${isSyncing ? 'sync-loading' : 'sync-success'}`}></span>
-                                <span className="text-[8px] font-black uppercase opacity-50 tracking-widest">{isSyncing ? 'Sync...' : 'Partagé'}</span>
+                                <span className="text-[8px] font-black uppercase opacity-50">{isSyncing ? 'Sync...' : 'Partagé'}</span>
                             </div>
                         </div>
                         <div className="flex gap-2">
@@ -173,6 +185,19 @@
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
+                        {view === 'projects' && (
+                            <div className="p-6 space-y-4 max-w-3xl mx-auto">
+                                <h2 className="text-2xl font-black italic uppercase mb-8 text-slate-800">Mes Chantiers</h2>
+                                {projects.map(p => (
+                                    <div key={p.id} onClick={() => { setSelectedId(p.id); setView('details'); }} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center cursor-pointer active:scale-95 transition-all">
+                                        <span className="font-black uppercase text-slate-700">{p.name}</span>
+                                        <Icon name="right" size={18} color="#94a3b8" />
+                                    </div>
+                                ))}
+                                <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", type: 'input', onConfirm: (v) => triggerSync([...projects, {id: Date.now().toString(), name: v, tasks: []}])})} className="w-full p-10 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase">+ Nouveau Chantier</button>
+                            </div>
+                        )}
+
                         {view === 'planning' && activeProject && (
                             <div className="flex flex-col h-full bg-white overflow-hidden">
                                 <div className="p-3 border-b flex justify-between items-center bg-slate-50 shrink-0">
@@ -183,18 +208,15 @@
                                     <span className="text-[10px] font-black uppercase italic text-blue-600 truncate max-w-[150px]">{activeProject.name}</span>
                                 </div>
                                 
-                                {/* CONTENEUR SCROLLABLE AVEC BARRE DE DEFILEMENT FORCEE */}
-                                <div className="flex-1 custom-scrollbar-h pb-4">
+                                <div className="flex-1 custom-scrollbar-h pb-8">
                                     <div className="inline-block min-w-full">
-                                        {/* HEADER DU PLANNING (ANNEE + DATE) */}
                                         <div className="flex sticky top-0 z-40">
                                             <div className="w-32 shrink-0 bg-slate-800 text-white p-3 text-[8px] font-black sticky left-0 z-50 border-r border-white/10 italic flex flex-col justify-center">
-                                                <span>ANNEE</span>
+                                                <span>ANNÉE</span>
                                                 <div className="h-[1px] bg-white/20 my-1"></div>
                                                 <span>LOTS</span>
                                             </div>
                                             <div className="flex flex-col">
-                                                {/* Ligne des Années */}
                                                 <div className="flex border-b border-white/5 bg-slate-800">
                                                     {(() => {
                                                         const years = [];
@@ -204,13 +226,12 @@
                                                             years.find(item => item.year === y).count++;
                                                         });
                                                         return years.map(item => (
-                                                            <div key={item.year} style={{ width: (item.count * ganttZoom) + 'px' }} className="shrink-0 text-center py-1 text-[9px] font-black text-blue-400 border-r border-white/10">
+                                                            <div key={item.year} style={{ width: (item.count * ganttZoom) + 'px' }} className="shrink-0 text-center py-1 text-[10px] font-black text-blue-400 border-r border-white/10 tracking-widest">
                                                                 {item.year}
                                                             </div>
                                                         ));
                                                     })()}
                                                 </div>
-                                                {/* Ligne des Dates/Mois */}
                                                 <div className="flex bg-slate-900">
                                                     {ganttRange.map((d, i) => (
                                                         <div key={i} style={{width: ganttZoom+'px'}} className={`shrink-0 text-center py-2 border-r border-white/5 text-white ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-white/5' : ''}`}>
@@ -222,12 +243,11 @@
                                             </div>
                                         </div>
 
-                                        {/* CORPS DU PLANNING */}
                                         {activeProject.tasks.map(task => (
                                             <div key={task.id} className="border-b border-slate-100">
-                                                <div className="flex bg-blue-50/50">
+                                                <div className="flex bg-blue-50/30">
                                                     <div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r bg-blue-50/80">{task.title}</div>
-                                                    <div className="flex-1"></div>
+                                                    <div className="flex-1 h-6"></div>
                                                 </div>
                                                 {task.subtasks.map(sub => {
                                                     const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
@@ -252,17 +272,26 @@
                             </div>
                         )}
 
-                        {/* Reste des vues (inchangées) */}
-                        {view === 'projects' && (
-                            <div className="p-6 space-y-4 max-w-3xl mx-auto">
-                                <h2 className="text-2xl font-black italic uppercase mb-8 text-slate-800">Mes Chantiers</h2>
-                                {projects.map(p => (
-                                    <div key={p.id} onClick={() => { setSelectedId(p.id); setView('details'); }} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center cursor-pointer active:scale-95 transition-all">
-                                        <span className="font-black uppercase text-slate-700">{p.name}</span>
-                                        <Icon name="right" size={18} color="#94a3b8" />
+                        {view === 'budget' && activeProject && (
+                            <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
+                                <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase relative overflow-hidden">
+                                    <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Budget Prévisionnel HT</p>
+                                    <p className="text-4xl">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
+                                </div>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="bg-white p-6 rounded-[24px] border shadow-sm">
+                                        <p className="font-black text-[9px] text-blue-600 uppercase mb-4 tracking-widest">{task.title}</p>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="flex justify-between items-center py-3 border-t border-slate-50">
+                                                <span className="text-xs font-bold uppercase text-slate-600">{sub.title}</span>
+                                                <div className="flex items-center bg-slate-50 rounded-xl px-3">
+                                                    <input type="number" value={sub.cost || ''} onChange={e => updateSub(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-transparent font-black text-xs text-right outline-none text-blue-600" placeholder="0"/>
+                                                    <span className="text-[10px] font-black text-slate-400 ml-1">€</span>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 ))}
-                                <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", type: 'input', onConfirm: (v) => triggerSync([...projects, {id: Date.now().toString(), name: v, tasks: []}])})} className="w-full p-10 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase">+ Nouveau Chantier</button>
                             </div>
                         )}
 
@@ -324,14 +353,14 @@
                         )}
                     </main>
 
-                    {/* MODALES ET DIALOGUES */}
+                    {/* MODALES */}
                     {dialog.open && (
-                        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl border border-slate-100">
-                                <h3 className="text-lg font-black uppercase italic mb-6 text-slate-800">{dialog.title}</h3>
-                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none border-2 border-transparent focus:border-blue-600" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-slate-800">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
+                                <h3 className="text-lg font-black uppercase italic mb-6">{dialog.title}</h3>
+                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
                                 <div className="flex gap-3">
-                                    <button className="flex-1 py-4 font-black uppercase text-slate-400 bg-slate-100 rounded-2xl" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
+                                    <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
                                 </div>
                             </div>
@@ -342,9 +371,9 @@
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-slate-800">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl max-h-[70vh] flex flex-col">
                                 <h3 className="text-lg font-black uppercase italic mb-4">Lier après :</h3>
-                                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar-h">
                                     {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
-                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl hover:bg-blue-50 border border-slate-100 transition-colors" onClick={() => {
+                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl border border-slate-100" onClick={() => {
                                             const d = new Date(other.date); d.setDate(d.getDate() + (parseInt(other.duration) || 0));
                                             updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0] });
                                             setLinkDialog({ open: false });
@@ -361,29 +390,30 @@
 
                     {viewer.open && (
                         <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-                            <button className="absolute top-6 left-6 text-white bg-red-600 p-4 rounded-full shadow-xl" onClick={() => setDialog({open: true, title: "Supprimer la photo ?", type: 'confirm', onConfirm: () => {
+                            <button className="absolute top-6 left-6 text-white bg-red-600 p-4 rounded-full shadow-xl" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
                                 const list = [...viewer.photos]; list.splice(viewer.index, 1);
                                 updateSub(viewer.taskId, viewer.subId, { photos: list });
                                 if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
                             }})}><Icon name="trash" size={20}/></button>
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
                             {viewer.index > 0 && <button className="absolute left-4 text-white p-4" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
-                            <img src={viewer.photos[viewer.index]} className="max-w-full max-h-full object-contain shadow-2xl" />
+                            <img src={viewer.photos[viewer.index]} className="max-w-full max-h-full object-contain" />
                             {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
                         </div>
                     )}
 
-                    {/* BARRE DE NAVIGATION FIXE BASSE */}
+                    {/* BARRE DE NAVIGATION : L'ONGLET BUDGET EST RE-ACTIF */}
                     {selectedId && (
-                        <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
+                        <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
                             {[
                                 {id: 'details', icon: 'edit', label: 'Lots'},
                                 {id: 'planning', icon: 'calendar', label: 'Planning'},
-                                {id: 'tracking', icon: 'camera', label: 'Suivi'}
+                                {id: 'tracking', icon: 'camera', label: 'Suivi'},
+                                {id: 'budget', icon: 'wallet', label: 'Budget'}
                             ].map(item => (
-                                <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center flex-1 transition-all duration-300 ${view === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
+                                <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center flex-1 transition-all ${view === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
                                     <div className={`p-2 rounded-xl ${view === item.id ? 'bg-blue-50' : ''}`}><Icon name={item.icon} size={22}/></div>
-                                    <span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
+                                    <span className="text-[9px] font-black uppercase mt-1">{item.label}</span>
                                 </button>
                             ))}
                         </nav>
