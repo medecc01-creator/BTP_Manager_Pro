@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BTP Manager Pro - Sync Optimisée</title>
+    <title>BTP Manager Pro</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
 
@@ -29,6 +29,7 @@
         .sync-success { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .editable:hover { background: rgba(37, 99, 235, 0.05); border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -120,6 +121,15 @@
 
             const activeProject = projects.find(p => p.id === selectedId);
 
+            const updateSub = (tId, sId, data) => {
+                const newProjects = projects.map(p => p.id === selectedId ? {
+                    ...p, tasks: p.tasks.map(t => t.id === tId ? {
+                        ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? {...s, ...data} : s)
+                    } : t)
+                } : p);
+                triggerSync(newProjects);
+            };
+
             const moveItem = (type, taskId, subId, direction) => {
                 const newProjects = JSON.parse(JSON.stringify(projects));
                 const pIdx = newProjects.findIndex(p => p.id === selectedId);
@@ -135,15 +145,6 @@
                     const newSIdx = direction === 'up' ? sIdx - 1 : sIdx + 1;
                     if (newSIdx >= 0 && newSIdx < subs.length) [subs[sIdx], subs[newSIdx]] = [subs[newSIdx], subs[sIdx]];
                 }
-                triggerSync(newProjects);
-            };
-
-            const updateSub = (tId, sId, data) => {
-                const newProjects = projects.map(p => p.id === selectedId ? {
-                    ...p, tasks: p.tasks.map(t => t.id === tId ? {
-                        ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? {...s, ...data} : s)
-                    } : t)
-                } : p);
                 triggerSync(newProjects);
             };
 
@@ -186,8 +187,9 @@
                             <div className="p-6 space-y-4 max-w-3xl mx-auto">
                                 <h2 className="text-2xl font-black italic uppercase">Mes Chantiers</h2>
                                 {projects.map(p => (
-                                    <div key={p.id} onClick={() => { setSelectedId(p.id); setView('details'); }} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center cursor-pointer active:scale-95 transition-all">
-                                        <span className="font-black uppercase text-slate-700">{p.name}</span>
+                                    <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center active:scale-95 transition-all">
+                                        <span onClick={() => { setSelectedId(p.id); setView('details'); }} className="font-black uppercase text-slate-700 flex-1 cursor-pointer">{p.name}</span>
+                                        <button onClick={() => setDialog({open: true, title: "Renommer Chantier", value: p.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(proj => proj.id === p.id ? {...proj, name: v} : proj))})} className="p-2 text-slate-300 hover:text-blue-600 mr-2"><Icon name="edit" size={16}/></button>
                                         <Icon name="right" size={18} color="#94a3b8" />
                                     </div>
                                 ))}
@@ -197,7 +199,7 @@
 
                         {view === 'details' && activeProject && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
-                                <h2 className="text-xl font-black uppercase italic">{activeProject.name}</h2>
+                                <h2 className="text-xl font-black uppercase italic editable" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
                                 {activeProject.tasks.map((task) => (
                                     <div key={task.id} className="bg-white p-6 rounded-[32px] border shadow-sm transition-all hover:shadow-md">
                                         <div className="flex justify-between mb-4 items-center">
@@ -206,7 +208,7 @@
                                                     <button onClick={() => moveItem('task', task.id, null, 'up')} className="hover:text-blue-600"><Icon name="up" size={16}/></button>
                                                     <button onClick={() => moveItem('task', task.id, null, 'down')} className="hover:text-blue-600"><Icon name="down" size={16}/></button>
                                                 </div>
-                                                <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest">{task.title}</h4>
+                                                <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Nom du Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
                                             </div>
                                             <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500 transition-colors"><Icon name="trash" size={14}/></button>
                                         </div>
@@ -218,7 +220,7 @@
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-center mb-2 font-black text-xs uppercase">
-                                                        <span>{sub.title}</span>
+                                                        <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
                                                         <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className="text-blue-500 bg-white p-2 rounded-xl border border-blue-50 shadow-sm active:scale-90 transition-transform"><Icon name="link" size={12}/></button>
                                                     </div>
                                                     <div className="flex gap-2">
@@ -228,10 +230,10 @@
                                                 </div>
                                             </div>
                                         ))}
-                                        <button onClick={() => setDialog({open: true, title: "Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {id: Date.now().toString(), title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 transition-all">+ Tâche</button>
+                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {id: Date.now().toString(), title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 transition-all">+ Tâche</button>
                                     </div>
                                 ))}
-                                <button onClick={() => setDialog({open: true, title: "Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
+                                <button onClick={() => setDialog({open: true, title: "Nouveau Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
                             </div>
                         )}
 
