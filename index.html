@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BTP Manager Pro v5</title>
+    <title>BTP Manager Pro v5 - Fix Final</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #f8fafc; font-family: 'Inter', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
-        .custom-scrollbar::-webkit-scrollbar { height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .modal-anim { animation: fadeIn 0.2s ease-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -78,6 +78,7 @@
             const [uploading, setUploading] = useState(false);
             const [fullscreenImage, setFullscreenImage] = useState(null);
             const [zoomLevel, setZoomLevel] = useState(25);
+            const [collapsedLots, setCollapsedLots] = useState({});
 
             useEffect(() => {
                 window.FirebaseOps.initAuth().then(() => {
@@ -94,6 +95,57 @@
 
             const activeProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
+            // LOGIQUE GANTT CALCULÉE
+            const processedTasks = useMemo(() => {
+                if (!activeProject) return [];
+                const results = {};
+                const allSubtasks = [];
+                activeProject.tasks.forEach(t => t.subtasks.forEach(s => allSubtasks.push({ ...s, taskId: t.id })));
+                const calculate = (id, visited = new Set()) => {
+                    if (results[id]) return results[id];
+                    const st = allSubtasks.find(s => s.id === id);
+                    if (!st || visited.has(id)) return null;
+                    visited.add(id);
+                    let finalStart = st.date; 
+                    if (st.linkedTo) {
+                        const prev = calculate(st.linkedTo, visited);
+                        if (prev) {
+                            const d = new Date(prev.calculatedStart);
+                            d.setDate(d.getDate() + parseInt(prev.duration || 1));
+                            finalStart = d.toISOString().split('T')[0];
+                        }
+                    }
+                    results[id] = { ...st, calculatedStart: finalStart };
+                    return results[id];
+                };
+                allSubtasks.forEach(s => calculate(s.id));
+                return activeProject.tasks.map(t => ({ ...t, subtasks: t.subtasks.map(s => results[s.id] || s) }));
+            }, [activeProject]);
+
+            const timelineDates = useMemo(() => {
+                let start = new Date(); let end = new Date(); end.setMonth(end.getMonth() + 4);
+                if (processedTasks.length > 0) {
+                    processedTasks.forEach(t => t.subtasks.forEach(s => {
+                        const ds = new Date(s.calculatedStart); const de = new Date(ds); de.setDate(de.getDate() + parseInt(s.duration || 1));
+                        if (ds < start) start = new Date(ds); if (de > end) end = new Date(de);
+                    }));
+                }
+                start.setDate(start.getDate() - 7); end.setDate(end.getDate() + 30);
+                const dates = []; let curr = new Date(start);
+                while (curr <= end) { dates.push(new Date(curr)); curr.setDate(curr.getDate() + 1); }
+                return dates;
+            }, [processedTasks]);
+
+            const monthsHeader = useMemo(() => {
+                const months = [];
+                timelineDates.forEach(d => {
+                    const label = d.toLocaleDateString('fr', { month: 'long', year: 'numeric' });
+                    if (months.length === 0 || months[months.length - 1].label !== label) months.push({ label, count: 1 });
+                    else months[months.length - 1].count++;
+                });
+                return months;
+            }, [timelineDates]);
+
             const updateSubtask = (tId, sId, data) => {
                 setProjects(prev => prev.map(p => p.id === selectedProjectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
@@ -102,14 +154,10 @@
                 } : p));
             };
 
-            // GESTION BINAIRE (BLOBS) POUR ÉVITER LE CRASH MÉMOIRE
             const handlePhotoUpload = async (tId, sId, file) => {
                 if (!file) return;
                 setUploading(true);
-                
                 try {
-                    // On utilise le fichier brut (File est un type de Blob)
-                    // Le navigateur le gère en flux pour éviter de saturer la RAM
                     const formData = new FormData();
                     formData.append('file', file);
                     formData.append('upload_preset', UPLOAD_PRESET);
@@ -119,134 +167,169 @@
                         body: formData
                     });
 
+                    if (!res.ok) throw new Error("Erreur serveur");
                     const data = await res.json();
-                    if (!res.ok) throw new Error(data.error?.message);
-
+                    
                     const currentPhotos = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId).photos || [];
                     updateSubtask(tId, sId, { photos: [...currentPhotos, data.secure_url] });
                 } catch (err) {
-                    alert("Erreur d'envoi : " + err.message);
+                    alert("Erreur mémoire mobile : essayez de réduire légèrement la résolution dans vos paramètres photo ou vérifiez votre connexion.");
                 } finally {
                     setUploading(false);
                 }
             };
 
-            if (isCloudLoading) return <div className="h-screen bg-slate-900 flex items-center justify-center text-white font-black italic">CHARGEMENT...</div>;
+            if (isCloudLoading) return <div className="h-screen bg-slate-900 flex items-center justify-center text-white font-black italic">SYNC...</div>;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
-                    {/* VISIONNEUSE PLEIN ÉCRAN */}
                     {fullscreenImage && (
-                        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-2 modal-anim" onClick={() => setFullscreenImage(null)}>
-                            <button className="absolute top-4 right-4 text-white bg-white/10 p-4 rounded-full backdrop-blur-md">
-                                <Icon name="x" size={30} />
+                        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-2 modal-anim" onClick={() => setFullscreenImage(null)}>
+                            <button className="absolute top-4 right-4 text-white bg-white/20 p-4 rounded-full backdrop-blur-md border border-white/20">
+                                <Icon name="x" size={24} />
                             </button>
-                            <img src={fullscreenImage} className="max-w-full max-h-full rounded shadow-2xl" />
+                            <img src={fullscreenImage} className="max-w-full max-h-full rounded shadow-2xl object-contain" />
                         </div>
                     )}
 
-                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center z-50 shrink-0 shadow-lg">
-                        <h1 className="font-black italic">BTP MANAGER PRO</h1>
+                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center z-50 shrink-0">
+                        <h1 className="font-black italic tracking-tighter uppercase">BTP PRO</h1>
                         {uploading && <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>}
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
-                        <div className="max-w-xl mx-auto p-4 space-y-6">
-                            
-                            {view === 'projects' && (
-                                <div className="space-y-4">
-                                    <h2 className="text-xl font-black italic text-slate-400 uppercase text-center py-4">Chantiers</h2>
-                                    {projects.map(p => (
-                                        <div key={p.id} onClick={() => { setSelectedProjectId(p.id); setView('tracking'); }} className="bg-white p-6 rounded-[2rem] border shadow-sm flex justify-between items-center active:scale-95 transition-transform">
-                                            <span className="font-bold text-slate-700">{p.name}</span>
-                                            <Icon name="chevronRight" className="text-blue-500" />
-                                        </div>
-                                    ))}
-                                    <button onClick={() => { const n = prompt("Nom ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]) }} className="w-full p-6 border-2 border-dashed border-slate-300 rounded-[2rem] text-slate-400 font-black">+ NOUVEAU PROJET</button>
-                                </div>
-                            )}
-
-                            {view === 'tracking' && activeProject && (
-                                <div className="space-y-8">
-                                    <h2 className="text-2xl font-black italic text-center mb-6">{activeProject.name}</h2>
-                                    {activeProject.tasks.map(task => (
-                                        <div key={task.id} className="space-y-4">
-                                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">{task.title}</p>
-                                            {task.subtasks.map(sub => (
-                                                <div key={sub.id} className="bg-white p-6 rounded-[2.5rem] border shadow-sm">
-                                                    <div className="flex justify-between items-center mb-4">
-                                                        <span className="font-bold text-sm text-slate-700">{sub.title}</span>
-                                                        <label className="p-4 bg-blue-50 text-blue-600 rounded-full cursor-pointer active:scale-90 transition-transform">
-                                                            <Icon name="camera" size={28} />
-                                                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoUpload(task.id, sub.id, e.target.files[0])} />
-                                                        </label>
-                                                    </div>
-                                                    <div className="flex items-center gap-3 mb-4">
-                                                        <input type="range" value={sub.progress} min="0" max="100" onChange={e => updateSubtask(task.id, sub.id, {progress: e.target.value})} className="flex-1 accent-blue-600 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer" />
-                                                        <span className="text-[10px] font-black text-blue-600">{sub.progress}%</span>
-                                                    </div>
-                                                    <div className="flex gap-3 overflow-x-auto custom-scrollbar py-2">
-                                                        {sub.photos?.map((p, i) => (
-                                                            <div key={i} onClick={() => setFullscreenImage(p)} className="w-24 h-24 shrink-0 rounded-2xl overflow-hidden border shadow-sm cursor-pointer">
-                                                                <img src={p.replace('/upload/', '/upload/w_300,h_300,c_fill,q_auto/')} className="w-full h-full object-cover" />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {view === 'budget' && activeProject && (
-                                <div className="space-y-6">
-                                    <div className="bg-blue-600 text-white p-10 rounded-[3rem] shadow-xl text-center border-b-8 border-blue-900">
-                                        <p className="text-[10px] font-black uppercase opacity-60">Total Dépensé</p>
-                                        <p className="text-5xl font-black mt-2 tracking-tighter">
-                                            {activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €
-                                        </p>
+                        {view === 'projects' && (
+                            <div className="max-w-xl mx-auto p-4 space-y-4">
+                                <h2 className="text-xl font-black text-slate-400 uppercase text-center py-6 tracking-widest">Chantiers</h2>
+                                {projects.map(p => (
+                                    <div key={p.id} onClick={() => { setSelectedProjectId(p.id); setView('tracking'); }} className="bg-white p-6 rounded-[2rem] border shadow-sm flex justify-between items-center active:scale-95 transition-transform">
+                                        <span className="font-bold text-slate-700">{p.name}</span>
+                                        <Icon name="chevronRight" className="text-blue-500" />
                                     </div>
-                                    {activeProject.tasks.map(task => (
-                                        <div key={task.id} className="bg-white p-6 rounded-[2.5rem] border shadow-sm">
-                                            <p className="text-[9px] font-black uppercase text-slate-400 mb-4 tracking-widest">{task.title}</p>
-                                            {task.subtasks.map(sub => (
-                                                <div key={sub.id} className="flex justify-between items-center py-4 border-t border-slate-50">
-                                                    <span className="text-xs font-bold text-slate-600">{sub.title}</span>
-                                                    <input type="number" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-28 p-2 bg-slate-50 rounded-xl text-right font-black text-blue-600 outline-none border border-transparent focus:border-blue-500" placeholder="0 €" />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                ))}
+                                <button onClick={() => { const n = prompt("Nom ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]) }} className="w-full p-6 border-2 border-dashed border-slate-300 rounded-[2rem] text-slate-400 font-black">+ NOUVEAU</button>
+                            </div>
+                        )}
 
-                            {view === 'details' && activeProject && (
-                                <div className="space-y-6">
-                                    <h2 className="text-2xl font-black italic text-center mb-6">Configuration</h2>
-                                    {activeProject.tasks.map(task => (
-                                        <div key={task.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{task.title}</span>
-                                                <button onClick={() => { const n = prompt("Tâche ?"); if(n) updateSubtask(task.id, 'new', {title: n, progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]}) }} className="text-blue-600 text-[10px] font-black uppercase">+ Ajouter</button>
-                                            </div>
-                                            {task.subtasks.map(sub => (
-                                                <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl mb-2 border border-slate-100 flex gap-2">
-                                                    <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-14 p-2 rounded-xl text-xs font-bold border" />
-                                                    <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold border" />
+                        {view === 'tracking' && activeProject && (
+                            <div className="max-w-xl mx-auto p-4 space-y-8">
+                                <h2 className="text-2xl font-black italic text-center py-4">{activeProject.name}</h2>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="space-y-4">
+                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">{task.title}</p>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="bg-white p-6 rounded-[2.5rem] border shadow-sm">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <span className="font-bold text-sm text-slate-700">{sub.title}</span>
+                                                    <label className="p-4 bg-blue-50 text-blue-600 rounded-full cursor-pointer active:scale-90 transition-transform">
+                                                        <Icon name="camera" size={28} />
+                                                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoUpload(task.id, sub.id, e.target.files[0])} />
+                                                    </label>
                                                 </div>
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <input type="range" value={sub.progress} min="0" max="100" onChange={e => updateSubtask(task.id, sub.id, {progress: e.target.value})} className="flex-1 accent-blue-600" />
+                                                    <span className="text-[10px] font-black text-blue-600">{sub.progress}%</span>
+                                                </div>
+                                                <div className="flex gap-3 overflow-x-auto custom-scrollbar py-2">
+                                                    {sub.photos?.map((p, i) => (
+                                                        <div key={i} onClick={() => setFullscreenImage(p)} className="w-24 h-24 shrink-0 rounded-2xl overflow-hidden border shadow-sm">
+                                                            <img src={p.replace('/upload/', '/upload/w_300,h_300,c_fill,q_auto/')} className="w-full h-full object-cover" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {view === 'planning' && activeProject && (
+                            <div className="h-full flex flex-col bg-white">
+                                <div className="p-3 border-b bg-slate-50 flex justify-between items-center px-6 shrink-0">
+                                    <span className="text-[9px] font-black uppercase text-slate-400">Zoom Gantt</span>
+                                    <input type="range" min="10" max="60" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} className="w-32"/>
+                                </div>
+                                <div className="flex-1 overflow-auto custom-scrollbar relative">
+                                    <div className="inline-block min-w-full">
+                                        <div className="flex sticky top-0 z-40 h-10 bg-slate-900">
+                                            <div className="w-40 shrink-0 bg-slate-900 border-r border-slate-800 sticky left-0 z-50"></div>
+                                            {monthsHeader.map((m, i) => (
+                                                <div key={i} style={{ width: (m.count * zoomLevel) + 'px' }} className="shrink-0 text-white text-[8px] font-black uppercase flex items-center px-3 border-r border-slate-800">{m.label}</div>
                                             ))}
                                         </div>
-                                    ))}
-                                    <button onClick={() => { const n = prompt("Lot ?"); if(n) setProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, tasks: [...p.tasks, { id: Date.now().toString(), title: n, subtasks: [] }] } : p)) }} className="w-full py-5 border-2 border-dashed rounded-[2.5rem] text-slate-400 font-black text-[10px]">+ LOT</button>
+                                        {processedTasks.map(task => (
+                                            <div key={task.id}>
+                                                <div className="flex h-10 bg-slate-50 items-center border-b">
+                                                    <div className="w-40 shrink-0 px-2 sticky left-0 z-30 bg-slate-100 border-r flex items-center gap-1 shadow-md">
+                                                        <button onClick={() => setCollapsedLots({...collapsedLots, [task.id]: !collapsedLots[task.id]})} className="text-slate-400"><Icon name={collapsedLots[task.id] ? "chevronRight" : "chevronDown"} size={12}/></button>
+                                                        <span className="text-[9px] font-black uppercase text-slate-600 truncate">{task.title}</span>
+                                                    </div>
+                                                </div>
+                                                {!collapsedLots[task.id] && task.subtasks.map(sub => {
+                                                    const start = new Date(sub.calculatedStart); const offset = Math.ceil((start - timelineDates[0]) / (1000 * 60 * 60 * 24));
+                                                    return (
+                                                        <div key={sub.id} className="flex h-10 border-b items-center">
+                                                            <div className="w-40 shrink-0 px-6 sticky left-0 z-30 bg-white border-r text-[9px] font-bold text-slate-500 truncate">{sub.title}</div>
+                                                            <div className="flex-1 relative h-full">
+                                                                <div className="absolute top-2.5 h-5 rounded shadow-sm" style={{ left: (offset * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px', backgroundColor: sub.progress == 100 ? '#22c55e' : '#3b82f6' }}></div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
+
+                        {view === 'budget' && activeProject && (
+                            <div className="max-w-xl mx-auto p-4 space-y-6">
+                                <div className="bg-blue-600 text-white p-10 rounded-[3rem] shadow-xl text-center border-b-8 border-blue-900 mb-8">
+                                    <p className="text-[10px] font-black uppercase opacity-60">Total Budget</p>
+                                    <p className="text-4xl font-black mt-1">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
+                                </div>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="bg-white p-6 rounded-[2rem] border shadow-sm">
+                                        <p className="text-[9px] font-black uppercase text-slate-400 mb-4">{task.title}</p>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="flex justify-between items-center py-4 border-t border-slate-50">
+                                                <span className="text-xs font-bold text-slate-600">{sub.title}</span>
+                                                <input type="number" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl text-right font-black text-blue-600 text-xs" placeholder="0 €" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {view === 'details' && activeProject && (
+                            <div className="max-w-xl mx-auto p-4 space-y-6">
+                                <h2 className="text-xl font-black italic text-center py-4 uppercase">Lots & Tâches</h2>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="bg-white p-5 rounded-[2.5rem] border shadow-sm">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{task.title}</span>
+                                            <button onClick={() => { const n = prompt("Tâche ?"); if(n) updateSubtask(task.id, 'new', {title: n, progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]}) }} className="text-blue-600 text-[10px] font-black uppercase">+ Ajouter</button>
+                                        </div>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl mb-2 border border-slate-100 flex gap-2">
+                                                <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-14 p-2 rounded-xl text-xs font-bold border" />
+                                                <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold border" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                                <button onClick={() => { const n = prompt("Lot ?"); if(n) setProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, tasks: [...p.tasks, { id: Date.now().toString(), title: n, subtasks: [] }] } : p)) }} className="w-full py-5 border-2 border-dashed border-slate-300 rounded-[2rem] text-slate-400 font-black text-[10px]">+ AJOUTER LOT</button>
+                            </div>
+                        )}
                     </main>
 
-                    <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around items-center z-50 rounded-t-[3rem] shadow-2xl">
+                    <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around items-center z-50 rounded-t-[2.5rem] shadow-2xl">
                         <button onClick={() => setView('projects')} className={`flex flex-col items-center flex-1 ${view === 'projects' ? 'text-blue-600' : 'text-slate-300'}`}><Icon name="home" /><span className="text-[8px] font-black mt-1 uppercase">Accueil</span></button>
                         <button disabled={!activeProject} onClick={() => setView('details')} className={`flex flex-col items-center flex-1 ${view === 'details' ? 'text-blue-600' : 'text-slate-300'} ${!activeProject && 'opacity-10'}`}><Icon name="edit" /><span className="text-[8px] font-black mt-1 uppercase">Lots</span></button>
+                        <button disabled={!activeProject} onClick={() => setView('planning')} className={`flex flex-col items-center flex-1 ${view === 'planning' ? 'text-blue-600' : 'text-slate-300'} ${!activeProject && 'opacity-10'}`}><Icon name="calendar" /><span className="text-[8px] font-black mt-1 uppercase">Gantt</span></button>
                         <button disabled={!activeProject} onClick={() => setView('tracking')} className={`flex flex-col items-center flex-1 ${view === 'tracking' ? 'text-blue-600' : 'text-slate-300'} ${!activeProject && 'opacity-10'}`}><Icon name="camera" /><span className="text-[8px] font-black mt-1 uppercase">Suivi</span></button>
                         <button disabled={!activeProject} onClick={() => setView('budget')} className={`flex flex-col items-center flex-1 ${view === 'budget' ? 'text-blue-600' : 'text-slate-300'} ${!activeProject && 'opacity-10'}`}><Icon name="wallet" /><span className="text-[8px] font-black mt-1 uppercase">Budget</span></button>
                     </nav>
