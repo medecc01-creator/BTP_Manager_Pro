@@ -50,7 +50,7 @@
                 await setDoc(doc(db, "data", "final_pro"), { content: JSON.stringify(data), lastUpdate: new Date().toISOString() });
             },
             subscribeData: (callback) => {
-                return onSnapshot(doc(db, "data", "final_pro"), (doc) => {
+                return onSnapshot(doc(db, "data", "btp_v3_main"), (doc) => {
                     if (doc.exists()) callback(JSON.parse(doc.data().content));
                     else callback([]);
                 });
