@@ -155,29 +155,33 @@
             };
 
             const handlePhotoUpload = async (tId, sId, file) => {
-                if (!file) return;
-                setUploading(true);
-                try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    formData.append('upload_preset', UPLOAD_PRESET);
+    if (!file) return;
+    setUploading(true);
+    
+    // Au lieu de lire le fichier, on l'envoie directement en flux binaire
+    // Ne pas utiliser de FileReader ou de Canvas ici, car c'est ça qui sature la RAM
+    try {
+        const formData = new FormData();
+        formData.append('file', file); // On passe l'objet 'file' brut
+        formData.append('upload_preset', UPLOAD_PRESET);
 
-                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-                        method: 'POST',
-                        body: formData
-                    });
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+            method: 'POST',
+            body: formData,
+            mode: 'cors'
+        });
 
-                    if (!res.ok) throw new Error("Erreur serveur");
-                    const data = await res.json();
-                    
-                    const currentPhotos = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId).photos || [];
-                    updateSubtask(tId, sId, { photos: [...currentPhotos, data.secure_url] });
-                } catch (err) {
-                    alert("Erreur mémoire mobile : essayez de réduire légèrement la résolution dans vos paramètres photo ou vérifiez votre connexion.");
-                } finally {
-                    setUploading(false);
-                }
-            };
+        const data = await res.json();
+        if (data.secure_url) {
+            const currentPhotos = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId).photos || [];
+            updateSubtask(tId, sId, { photos: [...currentPhotos, data.secure_url] });
+        }
+    } catch (err) {
+        alert("Le téléphone bloque l'envoi à cause de la taille. Passez en mode Application Android pour lever cette limite.");
+    } finally {
+        setUploading(false);
+    }
+};
 
             if (isCloudLoading) return <div className="h-screen bg-slate-900 flex items-center justify-center text-white font-black italic">SYNC...</div>;
 
