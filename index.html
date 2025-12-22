@@ -10,9 +10,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
-        body { background-color: #f1f5f9; font-family: system-ui; -webkit-tap-highlight-color: transparent; }
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        body { background-color: #f1f5f9; font-family: system-ui; -webkit-tap-highlight-color: transparent; overflow: hidden; }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 2px solid #f1f5f9; }
+        
+        .sticky-col { 
+            position: sticky; 
+            left: 0; 
+            z-index: 30; 
+            background: white; 
+            box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1);
+        }
+        
         .photo-stack { position: relative; height: 120px; width: 120px; }
         .photo-stack-item { position: absolute; top: 0; left: 0; border: 3px solid white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .photo-stack-item:nth-last-child(1) { transform: rotate(0deg); z-index: 30; }
@@ -29,6 +39,21 @@
     <div id="root"></div>
 
     <script type="text/javascript">
+        // Génération dynamique du Favicon (Icone Home)
+        (function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32; canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2563eb'; // Bleu professionnel
+            ctx.beginPath();
+            ctx.moveTo(16, 4); ctx.lineTo(4, 14); ctx.lineTo(4, 28); ctx.lineTo(12, 28);
+            ctx.lineTo(12, 18); ctx.lineTo(20, 18); ctx.lineTo(20, 28); ctx.lineTo(28, 28);
+            ctx.lineTo(28, 14); ctx.closePath(); ctx.fill();
+            const link = document.createElement('link');
+            link.rel = 'icon'; link.href = canvas.toDataURL();
+            document.head.appendChild(link);
+        })();
+
         const SUPABASE_URL = 'https://ljitxlqkdkoaxgvfeuxh.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_p1t5UNCV5ODa0wNAM1LwYw_YmPIkRrl';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -44,7 +69,7 @@
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo } = React;
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
 
@@ -72,7 +97,7 @@
             const [projects, setProjects] = useState([]);
             const [selectedId, setSelectedId] = useState(null);
             const [isSyncing, setIsSyncing] = useState(false);
-            const [ganttZoom, setGanttZoom] = useState(30);
+            const [ganttZoom, setGanttZoom] = useState(40);
             const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null });
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
             const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
@@ -104,39 +129,50 @@
             };
 
             const ganttRange = useMemo(() => {
-                const allDates = activeProject?.tasks?.flatMap(t => t.subtasks?.map(s => new Date(s.date))).filter(d => !isNaN(d.getTime())) || [];
-                let start = new Date(); let end = new Date();
-                if (allDates.length > 0) {
-                    start = new Date(Math.min(...allDates)); start.setDate(start.getDate() - 5);
-                    end = new Date(Math.max(...allDates)); end.setDate(end.getDate() + 25);
-                } else { end.setDate(start.getDate() + 30); }
-                const dates = [];
-                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) dates.push(new Date(d));
-                return dates;
+                const subtasks = activeProject?.tasks?.flatMap(t => t.subtasks) || [];
+                if (subtasks.length === 0) {
+                    const d = new Date();
+                    return Array.from({length: 30}, (_, i) => { const nd = new Date(d); nd.setDate(d.getDate() + i); return nd; });
+                }
+                const dates = subtasks.map(s => new Date(s.date));
+                const endDates = subtasks.map(s => {
+                    const d = new Date(s.date);
+                    d.setDate(d.getDate() + (parseInt(s.duration) || 1));
+                    return d;
+                });
+                const start = new Date(Math.min(...dates));
+                start.setDate(start.getDate() - 7);
+                const end = new Date(Math.max(...endDates));
+                end.setDate(end.getDate() + 15);
+                const result = [];
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    result.push(new Date(d));
+                }
+                return result;
             }, [activeProject]);
 
             if (!user) return (
                 <div className="h-screen flex items-center justify-center bg-slate-900 p-6">
                     <form onSubmit={(e) => { e.preventDefault(); supabaseClient.auth.signInWithPassword(loginData).then(({data, error}) => error ? alert(error.message) : setUser(data.user)); }} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6">
-                        <h2 className="text-3xl font-black uppercase italic text-center mb-8 tracking-tighter">BTP Manager</h2>
+                        <h2 className="text-3xl font-black uppercase italic text-center mb-8 tracking-tighter text-slate-800">BTP Manager Pro</h2>
                         <input type="email" placeholder="Email" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold" onChange={e => setLoginData({...loginData, email: e.target.value})}/>
                         <input type="password" placeholder="Mot de passe" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold" onChange={e => setLoginData({...loginData, password: e.target.value})}/>
-                        <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest">Connexion</button>
+                        <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-transform shadow-lg shadow-blue-200">Connexion</button>
                     </form>
                 </div>
             );
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
-                    {/* MODALES ET OVERLAYS */}
+                    {/* MODALES */}
                     {dialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl modal-animate">
-                                <h3 className="text-lg font-black uppercase italic mb-6">{dialog.title}</h3>
-                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl modal-animate border border-slate-100">
+                                <h3 className="text-lg font-black uppercase italic mb-6 text-slate-800">{dialog.title}</h3>
+                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none border-2 border-transparent focus:border-blue-600" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400 bg-slate-100 rounded-2xl" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
-                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
+                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
                                 </div>
                             </div>
                         </div>
@@ -145,16 +181,16 @@
                     {linkDialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl modal-animate max-h-[70vh] flex flex-col">
-                                <h3 className="text-lg font-black uppercase italic mb-4">Lier après :</h3>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                                    {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).map(other => (
-                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl hover:bg-blue-50 border border-slate-50" onClick={() => {
-                                            const d = new Date(other.date); d.setDate(d.getDate() + parseInt(other.duration || 0));
+                                <h3 className="text-lg font-black uppercase italic mb-4 text-slate-800">Lier après :</h3>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                                    {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
+                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl hover:bg-blue-50 border border-slate-100 transition-colors" onClick={() => {
+                                            const d = new Date(other.date); d.setDate(d.getDate() + (parseInt(other.duration) || 0));
                                             updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0] });
                                             setLinkDialog({ open: false });
                                         }}>
-                                            <span className="text-[8px] font-black text-blue-600 uppercase block">{other.lot}</span>
-                                            <span className="font-bold">{other.title}</span>
+                                            <span className="text-[8px] font-black text-blue-600 uppercase block mb-1">{other.lot}</span>
+                                            <span className="font-bold text-slate-800">{other.title}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -165,7 +201,7 @@
 
                     {viewer.open && (
                         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center">
-                            <button className="absolute top-6 left-6 text-white z-50 bg-red-600 p-4 rounded-full" onClick={() => setDialog({open: true, title: "Supprimer photo ?", type: 'confirm', onConfirm: () => {
+                            <button className="absolute top-6 left-6 text-white z-50 bg-red-600 p-4 rounded-full shadow-xl" onClick={() => setDialog({open: true, title: "Supprimer la photo ?", type: 'confirm', onConfirm: () => {
                                 const list = [...viewer.photos]; list.splice(viewer.index, 1);
                                 updateSub(viewer.taskId, viewer.subId, { photos: list });
                                 if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
@@ -177,69 +213,71 @@
                         </div>
                     )}
 
-                    {/* HEADER FIXE */}
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50">
                         <div className="flex flex-col">
                             <h1 className="font-black italic text-xs uppercase tracking-tighter">BTP Manager Pro</h1>
                             <div className="flex items-center mt-0.5">
                                 <span className={`status-dot ${isSyncing ? 'sync-loading' : 'sync-success'}`}></span>
-                                <span className="text-[8px] font-black uppercase opacity-50 tracking-widest">{isSyncing ? 'Sync' : 'Partagé'}</span>
+                                <span className="text-[8px] font-black uppercase opacity-50 tracking-widest">{isSyncing ? 'Synchronisation...' : 'Données à jour'}</span>
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => setView('projects')} className="p-3 bg-white/10 rounded-xl"><Icon name="home" size={18}/></button>
-                            <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-3 bg-red-500/20 text-red-400 rounded-xl"><Icon name="logout" size={18}/></button>
+                            <button onClick={() => setView('projects')} className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-colors"><Icon name="home" size={18}/></button>
+                            <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-3 bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30 transition-colors"><Icon name="logout" size={18}/></button>
                         </div>
                     </header>
 
-                    {/* CONTENU PRINCIPAL */}
-                    <main className="flex-1 overflow-y-auto bg-slate-50 pb-32">
+                    <main className="flex-1 overflow-y-auto bg-slate-50 relative">
                         {view === 'projects' && (
-                            <div className="p-6 space-y-4 max-w-3xl mx-auto">
-                                <h2 className="text-2xl font-black italic uppercase mb-8">Mes Chantiers</h2>
+                            <div className="p-6 space-y-4 max-w-3xl mx-auto pb-32">
+                                <h2 className="text-2xl font-black italic uppercase mb-8 text-slate-800">Mes Chantiers</h2>
                                 {projects.map(p => (
-                                    <div key={p.id} onClick={() => { setSelectedId(p.id); setView('details'); }} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center cursor-pointer">
-                                        <span className="font-black uppercase">{p.name}</span>
-                                        <Icon name="right" size={18} />
+                                    <div key={p.id} onClick={() => { setSelectedId(p.id); setView('details'); }} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center cursor-pointer hover:border-blue-200 transition-all active:scale-[0.98]">
+                                        <span className="font-black uppercase text-slate-700">{p.name}</span>
+                                        <Icon name="right" size={18} color="#94a3b8" />
                                     </div>
                                 ))}
-                                <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", type: 'input', onConfirm: (v) => triggerSync([...projects, {id: Date.now().toString(), name: v, tasks: []}])})} className="w-full p-8 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase tracking-widest">+ Nouveau Chantier</button>
+                                <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", type: 'input', onConfirm: (v) => triggerSync([...projects, {id: Date.now().toString(), name: v, tasks: []}])})} className="w-full p-10 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase tracking-widest hover:border-blue-400 hover:text-blue-500 transition-all">+ Nouveau Chantier</button>
                             </div>
                         )}
 
                         {view === 'planning' && activeProject && (
-                            <div className="flex flex-col h-full bg-white">
-                                <div className="p-3 border-b flex justify-between items-center bg-slate-50">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[8px] font-bold opacity-30 uppercase">Zoom</span>
-                                        <input type="range" min="15" max="80" value={ganttZoom} onChange={e => setGanttZoom(e.target.value)} className="w-20 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
+                            <div className="flex flex-col h-full bg-white overflow-hidden">
+                                <div className="p-3 border-b flex justify-between items-center bg-slate-50 shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[8px] font-black opacity-40 uppercase">Zoom</span>
+                                        <input type="range" min="20" max="100" value={ganttZoom} onChange={e => setGanttZoom(parseInt(e.target.value))} className="w-24 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
                                     </div>
-                                    <span className="text-[8px] font-black uppercase italic opacity-40">{activeProject.name}</span>
+                                    <span className="text-[10px] font-black uppercase italic text-blue-600 truncate max-w-[150px]">{activeProject.name}</span>
                                 </div>
                                 <div className="flex-1 overflow-auto custom-scrollbar">
                                     <div className="inline-block min-w-full">
-                                        <div className="flex">
-                                            <div className="w-32 shrink-0 bg-slate-900 text-white p-3 text-[8px] font-black sticky left-0 z-20 border-r border-white/10 italic">STRUCTURE</div>
+                                        <div className="flex border-b">
+                                            <div className="w-32 shrink-0 bg-slate-900 text-white p-3 text-[8px] font-black sticky-col left-0 z-40 border-r border-white/10 italic flex items-center">LOTS / TÂCHES</div>
                                             {ganttRange.map((d, i) => (
-                                                <div key={i} style={{width: ganttZoom+'px'}} className="shrink-0 text-center py-2 border-r bg-slate-800 text-white border-white/5">
-                                                    <div className="text-[6px] uppercase opacity-40">{d.toLocaleDateString('fr-FR', {month: 'short'})}</div>
-                                                    <div className="text-[9px] font-black">{d.getDate()}</div>
+                                                <div key={i} style={{width: ganttZoom+'px'}} className={`shrink-0 text-center py-2 border-r border-slate-100 ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-slate-50' : ''}`}>
+                                                    <div className="text-[6px] uppercase text-slate-400">{d.toLocaleDateString('fr-FR', {month: 'short'})}</div>
+                                                    <div className={`text-[9px] font-black ${d.getDay() === 0 || d.getDay() === 6 ? 'text-slate-300' : 'text-slate-700'}`}>{d.getDate()}</div>
                                                 </div>
                                             ))}
                                         </div>
                                         {activeProject.tasks.map(task => (
-                                            <div key={task.id}>
-                                                <div className="flex bg-slate-100/80 border-b">
-                                                    <div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky left-0 bg-slate-100 z-10 border-r">{task.title}</div>
+                                            <div key={task.id} className="border-b border-slate-100">
+                                                <div className="flex bg-blue-50/50">
+                                                    <div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r bg-blue-50/80">{task.title}</div>
+                                                    <div className="flex-1"></div>
                                                 </div>
                                                 {task.subtasks.map(sub => {
                                                     const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
                                                     return (
-                                                        <div key={sub.id} className="flex h-8 border-b border-slate-50 items-center relative">
-                                                            <div className="w-32 shrink-0 px-3 text-[7px] font-bold text-slate-500 sticky left-0 bg-white z-10 truncate border-r">{sub.title}</div>
+                                                        <div key={sub.id} className="flex h-10 items-center relative group">
+                                                            <div className="w-32 shrink-0 px-3 text-[8px] font-bold text-slate-500 sticky-col left-0 z-30 border-r group-hover:bg-slate-50 transition-colors truncate">{sub.title}</div>
+                                                            {ganttRange.map((d, i) => (<div key={i} style={{width: ganttZoom+'px'}} className={`h-full shrink-0 border-r border-slate-50/50 ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-slate-50/40' : ''}`}></div>))}
                                                             {startIdx !== -1 && (
-                                                                <div className="absolute h-3 bg-blue-600 rounded-full" style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, sub.duration) * ganttZoom)+'px'}}>
-                                                                    <div className="h-full bg-green-400 rounded-full opacity-60" style={{width: (sub.progress || 0)+'%'}}></div>
+                                                                <div className="absolute h-5 bg-blue-500 rounded-md shadow-sm z-10 flex items-center justify-center overflow-hidden" 
+                                                                    style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, sub.duration) * ganttZoom)+'px'}}>
+                                                                    <div className="h-full bg-green-400 opacity-80 absolute left-0 top-0 transition-all duration-500" style={{width: (sub.progress || 0)+'%'}}></div>
+                                                                    <span className="relative z-20 text-[7px] font-black text-white drop-shadow-md">{sub.progress || 0}%</span>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -253,12 +291,12 @@
                         )}
 
                         {view === 'tracking' && activeProject && (
-                            <div className="p-6 max-w-2xl mx-auto space-y-6">
-                                <h2 className="text-2xl font-black italic uppercase">Suivi Chantier</h2>
+                            <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
+                                <h2 className="text-2xl font-black italic uppercase text-slate-800">Suivi Chantier</h2>
                                 {activeProject.tasks.map(task => task.subtasks.map(sub => (
                                     <div key={sub.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
                                         <div className="flex justify-between items-start mb-6">
-                                            <div><p className="text-[8px] font-black text-blue-600 uppercase mb-1">{task.title}</p><h3 className="font-black uppercase text-sm">{sub.title}</h3></div>
+                                            <div><p className="text-[8px] font-black text-blue-600 uppercase mb-1">{task.title}</p><h3 className="font-black uppercase text-sm text-slate-800">{sub.title}</h3></div>
                                             <label className="p-3 bg-blue-600 text-white rounded-2xl cursor-pointer shadow-lg active:scale-95 transition-transform"><Icon name="camera" size={20}/><input type="file" capture="camera" className="hidden" onChange={async e => {
                                                 if(!e.target.files[0]) return;
                                                 const fd = new FormData(); fd.append('file', e.target.files[0]); fd.append('upload_preset', UPLOAD_PRESET);
@@ -268,13 +306,11 @@
                                         </div>
                                         <div className="flex items-center gap-6">
                                             <div className="photo-stack cursor-pointer" onClick={() => sub.photos?.length && setViewer({photos: sub.photos, index: sub.photos.length-1, open: true, taskId: task.id, subId: sub.id})}>
-                                                {(sub.photos || []).map((url, i) => (
-                                                    <div key={i} className="photo-stack-item w-24 h-24 rounded-2xl overflow-hidden"><img src={url} className="w-full h-full object-cover"/></div>
-                                                ))}
+                                                {(sub.photos || []).map((url, i) => (<div key={i} className="photo-stack-item w-24 h-24 rounded-2xl overflow-hidden"><img src={url} className="w-full h-full object-cover"/></div>))}
                                                 {(!sub.photos || sub.photos.length === 0) && <div className="w-24 h-24 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 border-2 border-dashed border-slate-200"><Icon name="camera" size={24}/></div>}
                                             </div>
                                             <div className="flex-1 space-y-3">
-                                                <div className="flex justify-between text-[10px] font-black uppercase"><span>Avancement</span><span className="text-blue-600 font-black">{sub.progress || 0}%</span></div>
+                                                <div className="flex justify-between text-[10px] font-black uppercase text-slate-500"><span>Avancement</span><span className="text-blue-600 font-black">{sub.progress || 0}%</span></div>
                                                 <input type="range" value={sub.progress || 0} onChange={e => updateSub(task.id, sub.id, {progress: e.target.value})} className="w-full h-2 bg-slate-100 rounded-lg appearance-none accent-blue-600"/>
                                             </div>
                                         </div>
@@ -284,37 +320,37 @@
                         )}
 
                         {view === 'details' && activeProject && (
-                            <div className="p-6 max-w-2xl mx-auto space-y-6">
-                                <h2 className="text-xl font-black uppercase italic">{activeProject.name}</h2>
+                            <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
+                                <h2 className="text-xl font-black uppercase italic text-slate-800">{activeProject.name}</h2>
                                 {activeProject.tasks.map(task => (
                                     <div key={task.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
                                         <div className="flex justify-between mb-4 items-center">
-                                            <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest" onClick={() => setDialog({open: true, title: "Lot ?", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
-                                            <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200"><Icon name="trash" size={14}/></button>
+                                            <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest cursor-pointer" onClick={() => setDialog({open: true, title: "Modifier Lot ?", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
+                                            <button onClick={() => setDialog({open: true, title: "Supprimer le lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-300 hover:text-red-500 transition-colors"><Icon name="trash" size={14}/></button>
                                         </div>
                                         {task.subtasks.map((sub) => (
                                             <div key={sub.id} className="mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                                <div className="flex justify-between items-center mb-2 font-black text-xs uppercase">
-                                                    <span onClick={() => setDialog({open: true, title: "Tâche ?", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
-                                                    <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className="text-blue-500 bg-white p-2 rounded-xl border border-blue-50 shadow-sm"><Icon name="link" size={12}/></button>
+                                                <div className="flex justify-between items-center mb-2 font-black text-xs uppercase text-slate-700">
+                                                    <span className="cursor-pointer" onClick={() => setDialog({open: true, title: "Tâche ?", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
+                                                    <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className="text-blue-500 bg-white p-2 rounded-xl border border-blue-50 shadow-sm active:bg-blue-50 transition-colors"><Icon name="link" size={12}/></button>
                                                 </div>
                                                 <div className="flex gap-2">
-                                                    <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold outline-none bg-white"/>
-                                                    <input type="number" value={sub.duration} placeholder="Jrs" onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-xs font-bold text-center outline-none bg-white"/>
+                                                    <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold outline-none bg-white border border-transparent focus:border-blue-200"/>
+                                                    <input type="number" value={sub.duration} placeholder="Jrs" onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-xs font-bold text-center outline-none bg-white border border-transparent focus:border-blue-200"/>
                                                 </div>
                                             </div>
                                         ))}
-                                        <button onClick={() => setDialog({open: true, title: "Nouvelle tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {id: Date.now().toString(), title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: []})})} className="w-full py-3 bg-white text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-100">+ Tâche</button>
+                                        <button onClick={() => setDialog({open: true, title: "Nouvelle tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {id: Date.now().toString(), title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: []})})} className="w-full py-4 bg-white text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-300 hover:text-blue-400 transition-all">+ Ajouter une tâche</button>
                                     </div>
                                 ))}
-                                <button onClick={() => setDialog({open: true, title: "Nouveau lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
+                                <button onClick={() => setDialog({open: true, title: "Nom du lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === selectedId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg active:scale-95 transition-all">+ Nouveau Lot Travaux</button>
                             </div>
                         )}
 
                         {view === 'budget' && activeProject && (
-                            <div className="p-6 max-w-2xl mx-auto space-y-6">
-                                <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase">
-                                    <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Budget Total</p>
+                            <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
+                                <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase relative overflow-hidden">
+                                    <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Coût Total Estimé</p>
                                     <p className="text-4xl">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
                                 </div>
                                 {activeProject.tasks.map(task => (
@@ -322,8 +358,11 @@
                                         <p className="font-black text-[9px] text-blue-600 uppercase mb-4 tracking-widest">{task.title}</p>
                                         {task.subtasks.map(sub => (
                                             <div key={sub.id} className="flex justify-between items-center py-3 border-t border-slate-50">
-                                                <span className="text-xs font-bold uppercase">{sub.title}</span>
-                                                <input type="number" value={sub.cost || ''} onChange={e => updateSub(task.id, sub.id, {cost: e.target.value})} className="w-24 p-2 bg-slate-50 rounded-xl font-black text-xs text-right outline-none text-blue-600" placeholder="0 €"/>
+                                                <span className="text-xs font-bold uppercase text-slate-600">{sub.title}</span>
+                                                <div className="flex items-center bg-slate-50 rounded-xl px-3">
+                                                    <input type="number" value={sub.cost || ''} onChange={e => updateSub(task.id, sub.id, {cost: e.target.value})} className="w-20 p-2 bg-transparent font-black text-xs text-right outline-none text-blue-600" placeholder="0"/>
+                                                    <span className="text-[10px] font-black text-slate-400 ml-1">€</span>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -332,17 +371,17 @@
                         )}
                     </main>
 
-                    {/* NAVIGATION BASSE */}
                     {selectedId && (
-                        <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-40">
+                        <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
                             {[
                                 {id: 'details', icon: 'edit', label: 'Lots'},
                                 {id: 'planning', icon: 'calendar', label: 'Planning'},
                                 {id: 'tracking', icon: 'camera', label: 'Suivi'},
                                 {id: 'budget', icon: 'wallet', label: 'Budget'}
                             ].map(item => (
-                                <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center flex-1 transition-all ${view === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
-                                    <Icon name={item.icon} size={22}/><span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
+                                <button key={item.id} onClick={() => setView(item.id)} className={`flex flex-col items-center flex-1 transition-all duration-300 ${view === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
+                                    <div className={`p-2 rounded-xl ${view === item.id ? 'bg-blue-50' : ''}`}><Icon name={item.icon} size={22}/></div>
+                                    <span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
                                 </button>
                             ))}
                         </nav>
