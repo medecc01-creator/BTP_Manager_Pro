@@ -10,17 +10,16 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
     <style>
         body { background-color: #f8fafc; font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
         .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .content-container { width: 100%; max-width: 550px; margin: 0 auto; }
-        
-        /* Input Range Bleu */
         .progress-blue { -webkit-appearance: none; appearance: none; height: 10px; background: #e2e8f0; border-radius: 10px; outline: none; }
         .progress-blue::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: #2563eb; border-radius: 50%; cursor: pointer; border: 3px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-
         .modal-overlay { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); }
     </style>
 </head>
@@ -73,7 +72,7 @@
                 wallet: <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4Z"/>,
                 camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
                 trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />,
-                check: <path d="M20 6 9 17l-5-5" />
+                download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || null}</svg>;
         };
@@ -116,6 +115,34 @@
                 } : p));
             };
 
+            const generatePDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                const today = new Date().toLocaleDateString('fr-FR');
+                const totalBudget = activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0);
+
+                doc.setFontSize(22);
+                doc.text("RAPPORT DE CHANTIER", 14, 20);
+                doc.setFontSize(12);
+                doc.text(`Projet : ${activeProject.name}`, 14, 30);
+                doc.text(`Date : ${today}`, 14, 37);
+                doc.text(`Budget Total : ${totalBudget.toLocaleString()} €`, 14, 44);
+
+                let startY = 55;
+                activeProject.tasks.forEach(task => {
+                    doc.autoTable({
+                        startY: startY,
+                        head: [[task.title.toUpperCase(), 'Date', 'Avancement', 'Coût']],
+                        body: task.subtasks.map(s => [s.title, s.date, `${s.progress || 0}%`, `${parseFloat(s.cost || 0).toLocaleString()} €`]),
+                        theme: 'striped',
+                        headStyles: { fillColor: [15, 23, 42] }
+                    });
+                    startY = doc.lastAutoTable.finalY + 10;
+                });
+
+                doc.save(`Rapport_${activeProject.name}_${today}.pdf`);
+            };
+
             const handlePhotoUpload = async (tId, sId, file) => {
                 if (!file) return;
                 const formData = new FormData();
@@ -139,7 +166,6 @@
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
-                    
                     {modal.show && (
                         <div className="fixed inset-0 z-[100] modal-overlay flex items-center justify-center p-6">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
@@ -147,7 +173,7 @@
                                 {!modal.isConfirm ? (
                                     <input autoFocus className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 ring-blue-500 font-bold mb-6" value={modal.value} onChange={e => setModal({...modal, value: e.target.value})} />
                                 ) : (
-                                    <p className="text-slate-400 font-medium text-sm mb-8">Supprimer définitivement cet élément ?</p>
+                                    <p className="text-slate-400 font-medium text-sm mb-8">Supprimer définitivement ?</p>
                                 )}
                                 <div className="flex gap-3">
                                     <button onClick={() => setModal({show:false})} className="flex-1 py-4 font-black uppercase text-[10px] text-slate-400 bg-slate-100 rounded-2xl tracking-widest">Annuler</button>
@@ -165,13 +191,13 @@
                         <button onClick={() => setView('projects')} className="p-2 bg-white/10 rounded-full active:scale-90 transition-transform"><Icon name="home" size={18}/></button>
                     </header>
 
-                    <main className="flex-1 overflow-hidden relative bg-slate-50">
+                    <main className="flex-1 overflow-hidden bg-slate-50">
                         {view === 'projects' && (
                             <div className="p-6 h-full overflow-y-auto">
                                 <div className="content-container space-y-4">
-                                    <h2 className="text-2xl font-black italic mb-6 tracking-tighter uppercase">Mes Chantiers</h2>
+                                    <h2 className="text-2xl font-black italic mb-6 tracking-tighter uppercase text-slate-900">Mes Chantiers</h2>
                                     {projects.map(p => (
-                                        <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center group">
+                                        <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center group transition-all active:scale-95">
                                             <span onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="font-black uppercase text-slate-800 tracking-tight flex-1 cursor-pointer truncate mr-4">{p.name}</span>
                                             <div className="flex gap-2">
                                                 <button onClick={() => setModal({show:true, title:"Modifier", value:p.name, onConfirm:(v)=>setProjects(prev=>prev.map(proj=>proj.id===p.id?{...proj, name:v}:proj))})} className="p-2 text-slate-200 hover:text-blue-500 transition-colors"><Icon name="edit" size={16}/></button>
@@ -191,14 +217,14 @@
                                     {activeProject.tasks.map(task => (
                                         <div key={task.id} className="bg-white p-5 rounded-[32px] border shadow-sm border-slate-100">
                                             <div className="flex justify-between items-center mb-4 px-2">
-                                                <p className="font-black text-[9px] uppercase text-slate-300 tracking-[0.2em]">{task.title}</p>
+                                                <p onClick={() => setModal({show:true, title:"Lot", value:task.title, onConfirm:(v)=>setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.map(t=>t.id===task.id?{...t, title:v}:t)}:p))})} className="font-black text-[9px] uppercase text-slate-300 tracking-[0.2em] cursor-pointer hover:text-blue-500">{task.title}</p>
                                                 <button onClick={() => setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:p.tasks.filter(t=>t.id!==task.id)}:p))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
                                             </div>
                                             {task.subtasks.map(sub => (
                                                 <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl mb-3 border border-slate-100">
                                                     <div className="flex justify-between items-center mb-3">
-                                                        <span className="font-bold text-xs text-slate-700">{sub.title}</span>
-                                                        <button onClick={() => updateSubtask(task.id, sub.id, {title: prompt("Nom ?", sub.title)})} className="text-slate-300 hover:text-blue-500"><Icon name="edit" size={12}/></button>
+                                                        <span onClick={() => setModal({show:true, title:"Tâche", value:sub.title, onConfirm:(v)=>updateSubtask(task.id, sub.id, {title:v})})} className="font-bold text-xs text-slate-700 cursor-pointer">{sub.title}</span>
+                                                        <button onClick={() => setProjects(prev => prev.map(p => p.id === selectedProjectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, subtasks: t.subtasks.filter(s => s.id !== sub.id)} : t)} : p))} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={12}/></button>
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-[10px] font-bold border-none bg-white shadow-inner outline-none"/>
@@ -206,7 +232,7 @@
                                                     </div>
                                                 </div>
                                             ))}
-                                            <button onClick={() => updateSubtask(task.id, 'new', {id: Date.now().toString(), title: "Nouvelle tâche", progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]})} className="w-full py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-white border border-transparent hover:border-slate-100 transition-all">+ Tâche</button>
+                                            <button onClick={() => updateSubtask(task.id, 'new', {id: Date.now().toString(), title: "Nouvelle tâche", progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]})} className="w-full py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-white transition-all">+ Tâche</button>
                                         </div>
                                     ))}
                                     <button onClick={() => setProjects(prev=>prev.map(p=>p.id===selectedProjectId?{...p, tasks:[...p.tasks, {id:Date.now().toString(), title:"Nouveau Lot", subtasks:[]}]}:p))} className="w-full py-6 border-2 border-dashed border-blue-100 rounded-[40px] text-blue-600 font-black uppercase text-[10px] tracking-widest hover:bg-white transition-all">+ Nouveau Lot</button>
@@ -217,23 +243,21 @@
                         {view === 'planning' && activeProject && (
                             <div className="h-full flex flex-col bg-white overflow-hidden">
                                 <div className="p-4 border-b bg-slate-50 flex items-center justify-between shrink-0">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Zoom Planning</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Zoom</span>
                                     <input type="range" min="15" max="80" value={zoomLevel} onChange={e => setZoomLevel(parseInt(e.target.value))} className="w-32"/>
                                 </div>
                                 <div className="flex-1 overflow-auto custom-scrollbar relative">
                                     <div className="inline-block min-w-full">
                                         <div className="flex sticky top-0 z-40 bg-slate-900 text-white text-[8px] font-black uppercase">
-                                            <div className="w-32 shrink-0 p-4 sticky left-0 z-50 bg-slate-900 border-r border-slate-800 flex items-center">Éléments</div>
+                                            <div className="w-32 shrink-0 p-4 sticky left-0 z-50 bg-slate-900 border-r border-slate-800">Éléments</div>
                                             <div className="flex flex-col">
-                                                {/* Ligne des Mois/Année */}
                                                 <div className="flex border-b border-slate-800">
                                                     {timelineDates.filter(d => d.getDate() === 1 || timelineDates.indexOf(d) === 0).map((d, i) => (
-                                                        <div key={i} className="px-2 py-1 border-r border-slate-800 truncate" style={{ minWidth: (zoomLevel * 10) + 'px' }}>
+                                                        <div key={i} className="px-2 py-1 border-r border-slate-800 truncate italic" style={{ minWidth: (zoomLevel * 10) + 'px' }}>
                                                             {d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
                                                         </div>
                                                     ))}
                                                 </div>
-                                                {/* Ligne des Jours */}
                                                 <div className="flex">
                                                     {timelineDates.map((d, i) => (
                                                         <div key={i} style={{ width: zoomLevel + 'px' }} className={`shrink-0 text-center py-2 border-r border-slate-800 ${[0,6].includes(d.getDay()) ? 'bg-slate-800' : ''}`}>
@@ -244,25 +268,23 @@
                                             </div>
                                         </div>
                                         {activeProject.tasks.map(task => (
-                                            <div key={task.id} className="border-b">
-                                                {/* Ligne Titre du LOT */}
-                                                <div className="flex bg-slate-50/50 h-8 items-center">
-                                                    <div className="w-32 shrink-0 px-4 sticky left-0 z-30 bg-slate-50 border-r text-[8px] font-black uppercase text-blue-600 truncate italic">{task.title}</div>
-                                                    <div className="flex-1 relative h-full"></div>
+                                            <div key={task.id} className="border-b border-slate-100">
+                                                <div className="flex bg-blue-50/30 h-8 items-center">
+                                                    <div className="w-32 shrink-0 px-4 sticky left-0 z-30 bg-blue-50/80 border-r text-[8px] font-black uppercase text-blue-600 truncate italic">{task.title}</div>
+                                                    <div className="flex-1"></div>
                                                 </div>
-                                                {/* Lignes des tâches */}
                                                 {task.subtasks.map(sub => {
                                                     const d = new Date(sub.date); 
                                                     const start = Math.floor((d - timelineDates[0])/(24*60*60*1000));
                                                     return (
-                                                        <div key={sub.id} className="flex h-8 items-center">
+                                                        <div key={sub.id} className="flex h-8 items-center border-b border-slate-50 last:border-0">
                                                             <div className="w-32 shrink-0 px-4 pl-6 sticky left-0 z-30 bg-white border-r text-[9px] font-medium text-slate-500 truncate">{sub.title}</div>
                                                             <div className="flex-1 relative h-full flex items-center">
-                                                                <div className="absolute h-4 bg-slate-200 rounded-full overflow-hidden flex shadow-sm" style={{ left: (start * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px' }}>
+                                                                <div className="absolute h-4 bg-slate-100 rounded-full overflow-hidden flex shadow-sm" style={{ left: (start * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px' }}>
                                                                     <div className="h-full bg-green-500" style={{ width: (sub.progress || 0) + '%' }}></div>
                                                                     <div className="h-full bg-blue-500 flex-1"></div>
                                                                 </div>
-                                                                <span className="absolute text-[7px] font-black text-slate-900 ml-1 whitespace-nowrap" style={{ left: (start * zoomLevel + sub.duration * zoomLevel + 5) + 'px' }}>{sub.progress || 0}%</span>
+                                                                <span className="absolute text-[7px] font-black text-slate-900 ml-1" style={{ left: (start * zoomLevel + sub.duration * zoomLevel + 5) + 'px' }}>{sub.progress || 0}%</span>
                                                             </div>
                                                         </div>
                                                     )
@@ -277,17 +299,16 @@
                         {view === 'tracking' && activeProject && (
                             <div className="p-6 overflow-y-auto h-full pb-32">
                                 <div className="content-container space-y-8">
-                                    <h2 className="text-2xl font-black italic tracking-tighter uppercase">Suivi Chantier</h2>
+                                    <h2 className="text-2xl font-black italic tracking-tighter uppercase text-slate-900">Suivi Chantier</h2>
                                     {activeProject.tasks.map(task => (
                                         <div key={task.id}>
-                                            <p className="text-[10px] font-black uppercase text-slate-300 mb-4 tracking-widest">{task.title}</p>
+                                            <p className="text-[10px] font-black uppercase text-slate-300 mb-4 tracking-[0.2em]">{task.title}</p>
                                             {task.subtasks.map(sub => (
                                                 <div key={sub.id} className="bg-white p-6 rounded-[32px] border border-slate-100 mb-4 shadow-sm">
                                                     <div className="flex justify-between items-center mb-6">
                                                         <p className="font-bold text-sm text-slate-800">{sub.title}</p>
                                                         <label className="cursor-pointer text-blue-600 bg-blue-50 p-3 rounded-2xl active:scale-90 transition-transform">
                                                             <Icon name="camera" size={24}/>
-                                                            {/* capture="camera" ouvre directement l'appareil sur mobile */}
                                                             <input type="file" accept="image/*" capture="camera" className="hidden" onChange={e => handlePhotoUpload(task.id, sub.id, e.target.files[0])}/>
                                                         </label>
                                                     </div>
@@ -300,7 +321,7 @@
                                                     </div>
                                                     <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
                                                         {sub.photos?.map((p, i) => (
-                                                            <img key={i} src={p} className="w-20 h-20 rounded-2xl object-cover shadow-sm border border-slate-100"/>
+                                                            <img key={i} src={p} className="w-20 h-20 rounded-2xl object-cover shadow-sm border border-slate-100 transition-transform active:scale-150 z-10"/>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -314,6 +335,12 @@
                         {view === 'budget' && activeProject && (
                             <div className="p-6 overflow-y-auto h-full pb-32">
                                 <div className="content-container space-y-6">
+                                    <div className="flex justify-between items-center px-4">
+                                        <h2 className="text-2xl font-black italic tracking-tighter uppercase text-slate-900 leading-none">Finance</h2>
+                                        <button onClick={generatePDF} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-100 active:scale-95 transition-all">
+                                            <Icon name="download" size={14}/> PDF
+                                        </button>
+                                    </div>
                                     <div className="bg-slate-900 text-white p-10 rounded-[40px] shadow-xl text-center">
                                         <p className="text-[10px] font-black uppercase opacity-50 mb-2 italic tracking-widest">Total Dépenses</p>
                                         <p className="text-4xl font-black">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
