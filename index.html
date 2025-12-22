@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BTP Manager Pro - 5 Onglets Officiels</title>
+    <title>BTP Manager Pro - Restauration</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,12 +13,9 @@
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .gantt-text-plain { color: #000000; font-weight: 700; font-size: 10px; pointer-events: none; }
         input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
         input[type=range]::-webkit-slider-runnable-track { background: #e2e8f0; height: 8px; border-radius: 4px; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; background: #2563eb; border-radius: 50%; margin-top: -6px; border: 2px solid white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); cursor: pointer; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-modal { animation: fadeIn 0.2s ease-out; }
     </style>
 </head>
 <body>
@@ -47,10 +44,10 @@
             logout: () => signOut(auth),
             onAuth: (cb) => onAuthStateChanged(auth, cb),
             saveData: async (data) => {
-                await setDoc(doc(db, "data", "final_pro"), { content: JSON.stringify(data), lastUpdate: new Date().toISOString() });
+                await setDoc(doc(db, "data", "btp_v3_main"), { content: JSON.stringify(data), lastUpdate: new Date().toISOString() });
             },
             subscribeData: (callback) => {
-                return onSnapshot(doc(db, "data", "final_pro"), (doc) => {
+                return onSnapshot(doc(db, "data", "btp_v3_main"), (doc) => {
                     if (doc.exists()) callback(JSON.parse(doc.data().content));
                     else callback([]);
                 });
@@ -60,7 +57,6 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "Unsigneded";
 
@@ -98,7 +94,7 @@
                             setUser(u);
                             if (u) {
                                 window.FirebaseOps.subscribeData((data) => {
-                                    setProjects(data);
+                                    setProjects(data || []);
                                     setIsCloudLoading(false);
                                 });
                             } else { setIsCloudLoading(false); }
@@ -108,7 +104,7 @@
             }, []);
 
             useEffect(() => {
-                if (!isCloudLoading && user) {
+                if (!isCloudLoading && user && window.FirebaseOps) {
                     const timer = setTimeout(() => window.FirebaseOps.saveData(projects), 1500);
                     return () => clearTimeout(timer);
                 }
@@ -119,7 +115,7 @@
             const updateSubtask = (tId, sId, data) => {
                 setProjects(prev => prev.map(p => p.id === selectedProjectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
-                        ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? { ...s, ...data, lastChangeBy: user.email, lastChangeAt: new Date().toISOString() } : s)
+                        ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? { ...s, ...data } : s)
                     } : t)
                 } : p));
             };
@@ -129,12 +125,10 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('upload_preset', UPLOAD_PRESET);
-                try {
-                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
-                    const data = await res.json();
-                    const st = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId);
-                    updateSubtask(tId, sId, { photos: [...(st.photos || []), data.secure_url] });
-                } catch (e) { alert("Erreur upload photo"); }
+                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+                const data = await res.json();
+                const currentPhotos = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId).photos || [];
+                updateSubtask(tId, sId, { photos: [...currentPhotos, data.secure_url] });
             };
 
             const processedTasks = useMemo(() => {
@@ -173,28 +167,27 @@
             }, []);
 
             if (!user) return (
-                <div className="h-screen flex flex-col items-center justify-center bg-slate-900 p-6 text-white text-center">
-                    <h1 className="text-2xl font-black mb-8 italic">ACCÈS CHANTIER SÉCURISÉ</h1>
+                <div className="h-screen flex flex-col items-center justify-center bg-slate-900 p-6 text-white">
+                    <h1 className="text-xl font-black mb-8 italic">BTP MANAGER PRO</h1>
                     <div className="w-full max-w-sm space-y-4">
-                        <input className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 text-center outline-none" placeholder="Email" onChange={e => setLoginData({...loginData, email: e.target.value})}/>
-                        <input type="password" className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 text-center outline-none" placeholder="Mot de passe" onChange={e => setLoginData({...loginData, pass: e.target.value})}/>
-                        <button onClick={() => window.FirebaseOps.login(loginData.email, loginData.pass)} className="w-full p-4 rounded-2xl bg-blue-600 font-black shadow-lg">ENTRER</button>
+                        <input className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none" placeholder="Email" onChange={e => setLoginData({...loginData, email: e.target.value})}/>
+                        <input type="password" className="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none" placeholder="Mot de passe" onChange={e => setLoginData({...loginData, pass: e.target.value})}/>
+                        <button onClick={() => window.FirebaseOps.login(loginData.email, loginData.pass)} className="w-full p-4 rounded-2xl bg-blue-600 font-black">CONNEXION</button>
                     </div>
                 </div>
             );
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-900">
-                    <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center z-50 shrink-0 shadow-xl">
+                    <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center z-50 shrink-0">
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-600 p-2 rounded-lg"><Icon name="home" size={18}/></div>
-                            <h1 className="font-black text-xl tracking-tighter uppercase italic">BTP MANAGER <span className="text-blue-500">PRO</span></h1>
+                            <h1 className="font-black text-xl italic uppercase">BTP MANAGER</h1>
                         </div>
                         <button onClick={() => window.FirebaseOps.logout()} className="p-2 bg-slate-800 rounded-lg text-slate-400"><Icon name="x" size={16}/></button>
                     </header>
 
                     <main className="flex-1 overflow-hidden relative">
-                        {/* 1. PROJETS */}
                         {view === 'projects' && (
                             <div className="h-full overflow-y-auto p-8 bg-slate-50">
                                 <h2 className="text-2xl font-black mb-8">Mes Chantiers</h2>
@@ -202,18 +195,17 @@
                                     {projects.map(p => (
                                         <div key={p.id} onClick={() => { setSelectedProjectId(p.id); setView('details'); }} className="bg-white p-6 rounded-[32px] shadow-sm border hover:shadow-xl cursor-pointer">
                                             <h3 className="font-bold text-lg">{p.name}</h3>
-                                            <div className="text-[10px] font-black text-blue-600 uppercase mt-2">{p.tasks.length} Lots actifs</div>
+                                            <p className="text-[10px] font-black text-blue-600 uppercase mt-2">{p.tasks.length} Lots</p>
                                         </div>
                                     ))}
                                     <button onClick={() => { const n = prompt("Nom du chantier ?"); if(n) setProjects([...projects, {id: Date.now().toString(), name: n, tasks: []}]) }} className="border-2 border-dashed border-slate-300 rounded-[32px] p-8 flex flex-col items-center justify-center text-slate-400">
                                         <Icon name="plus" size={32} className="mb-2"/>
-                                        <span className="font-black text-[10px] uppercase">Ajouter un Chantier</span>
+                                        <span className="font-black text-[10px] uppercase">Nouveau Chantier</span>
                                     </button>
                                 </div>
                             </div>
                         )}
 
-                        {/* 2. DÉTAILS */}
                         {view === 'details' && activeProject && (
                             <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
                                 <div className="max-w-4xl mx-auto space-y-6">
@@ -225,14 +217,14 @@
                                                 <button onClick={() => { const n = prompt("Sous-tâche ?"); if(n) updateSubtask(task.id, 'new', {id: Date.now().toString(), title: n, progress: 0, duration: 1, date: new Date().toISOString().split('T')[0]}) }} className="text-blue-600 text-[10px] font-black">+ SOUS-TÂCHE</button>
                                             </div>
                                             {task.subtasks.map(sub => (
-                                                <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-3">
-                                                    <div className="flex justify-between mb-3">
+                                                <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl border mb-3">
+                                                    <div className="flex justify-between mb-2">
                                                         <input value={sub.title} onChange={e => updateSubtask(task.id, sub.id, {title: e.target.value})} className="font-bold text-sm bg-transparent outline-none flex-1"/>
-                                                        <button onClick={() => setLinkingTask({tId: task.id, sId: sub.id})} className="text-slate-400 hover:text-blue-500"><Icon name="link" size={14}/></button>
+                                                        <button onClick={() => setLinkingTask({tId: task.id, sId: sub.id})} className="text-slate-400"><Icon name="link" size={14}/></button>
                                                     </div>
                                                     <div className="flex gap-4">
-                                                        <div className="flex-1"><label className="text-[8px] font-black text-slate-400 block mb-1 uppercase">Durée</label><input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-full bg-white p-2 rounded-xl border text-xs font-bold"/></div>
-                                                        <div className="flex-1"><label className="text-[8px] font-black text-slate-400 block mb-1 uppercase">Date</label><input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="w-full bg-white p-2 rounded-xl border text-xs font-bold"/></div>
+                                                        <input type="number" value={sub.duration} onChange={e => updateSubtask(task.id, sub.id, {duration: e.target.value})} className="w-20 bg-white p-2 rounded-xl border text-xs font-bold" placeholder="Jours"/>
+                                                        <input type="date" value={sub.date} onChange={e => updateSubtask(task.id, sub.id, {date: e.target.value})} className="flex-1 bg-white p-2 rounded-xl border text-xs font-bold"/>
                                                     </div>
                                                 </div>
                                             ))}
@@ -243,9 +235,135 @@
                             </div>
                         )}
 
-                        {/* 3. PLANNING (LE GANTT) */}
                         {view === 'planning' && activeProject && (
                             <div className="h-full flex flex-col bg-white overflow-hidden">
                                 <div className="p-4 border-b flex justify-between items-center shrink-0">
-                                    <h2 className="font-black text-xs uppercase tracking-widest">Gantt Planning</h2>
-                                    <input type="range" min="30" max="150" value={zoomLevel
+                                    <h2 className="font-black text-xs uppercase tracking-widest text-slate-400">Planning Gantt</h2>
+                                    <input type="range" min="30" max="150" value={zoomLevel} onChange={e => setZoomLevel(e.target.value)} className="w-24"/>
+                                </div>
+                                <div className="flex-1 overflow-auto custom-scrollbar">
+                                    <div className="relative inline-block min-w-full">
+                                        <div className="flex bg-slate-900 text-white text-[9px] font-black sticky top-0 z-20">
+                                            <div className="w-40 shrink-0 p-4 border-r border-slate-800 bg-slate-900">TACHES</div>
+                                            {timelineDates.map((d, i) => (
+                                                <div key={i} style={{width: zoomLevel+'px'}} className="shrink-0 text-center py-4 border-r border-slate-800">{d.getDate()}</div>
+                                            ))}
+                                        </div>
+                                        {processedTasks.map(task => (
+                                            <div key={task.id}>
+                                                <div className="flex bg-slate-50 font-black text-[10px] p-2 border-b uppercase">{task.title}</div>
+                                                {task.subtasks.map(sub => {
+                                                    const start = new Date(sub.calculatedStart);
+                                                    const offset = Math.ceil((start - timelineDates[0]) / (1000 * 60 * 60 * 24));
+                                                    return (
+                                                        <div key={sub.id} className="flex border-b h-12 relative items-center">
+                                                            <div className="w-40 shrink-0 p-2 border-r text-[10px] font-bold text-slate-500 truncate">{sub.title}</div>
+                                                            <div className="absolute h-6 rounded-full bg-blue-500 border border-blue-600 shadow-lg flex items-center justify-center overflow-hidden" style={{ left: (160 + offset * zoomLevel) + 'px', width: (sub.duration * zoomLevel) + 'px' }}>
+                                                                <span className="text-[9px] font-black text-white px-2 truncate">{sub.progress}%</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'tracking' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
+                                <h2 className="text-2xl font-black mb-6">Suivi de chantier</h2>
+                                {activeProject.tasks.map(task => (
+                                    <div key={task.id} className="mb-8">
+                                        <div className="text-[10px] font-black uppercase text-slate-400 mb-2 ml-2 tracking-widest">{task.title}</div>
+                                        {task.subtasks.map(sub => (
+                                            <div key={sub.id} className="bg-white rounded-[24px] p-5 shadow-sm border mb-4">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <span className="font-bold text-sm">{sub.title}</span>
+                                                    <input type="number" placeholder="Coût €" value={sub.cost || ''} onChange={e => updateSubtask(task.id, sub.id, {cost: e.target.value})} className="w-24 bg-slate-50 border rounded-xl p-2 text-xs font-black text-green-600 outline-none"/>
+                                                </div>
+                                                <label className="cursor-pointer flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase mb-4">
+                                                    <Icon name="camera" size={16}/> Photo
+                                                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhotoUpload(task.id, sub.id, e.target.files[0])}/>
+                                                </label>
+                                                <div className="flex gap-2 overflow-x-auto mb-4 pb-2">
+                                                    {sub.photos?.map((photo, idx) => (
+                                                        <div key={idx} className="w-16 h-16 shrink-0 rounded-xl overflow-hidden border">
+                                                            <img src={photo.replace('/upload/', '/upload/w_200,c_scale/')} className="w-full h-full object-cover"/>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <input type="range" value={sub.progress} min="0" max="100" onChange={e => updateSubtask(task.id, sub.id, { progress: e.target.value })} className="flex-1"/>
+                                                    <span className="text-xs font-black w-8">{sub.progress}%</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {view === 'budget' && activeProject && (
+                            <div className="h-full overflow-y-auto p-6 bg-slate-50 pb-24">
+                                <div className="max-w-md mx-auto">
+                                    <div className="bg-green-600 p-10 rounded-[48px] text-white shadow-2xl mb-8 text-center">
+                                        <p className="text-[10px] font-black uppercase opacity-70 mb-2 tracking-widest">Total Dépenses</p>
+                                        <p className="text-5xl font-black">{activeProject.tasks.reduce((sum, t) => sum + t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0), 0).toLocaleString()} €</p>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {activeProject.tasks.map(t => (
+                                            <div key={t.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center">
+                                                <p className="font-bold text-slate-700">{t.title}</p>
+                                                <p className="font-black text-xl">{t.subtasks.reduce((s, sub) => s + parseFloat(sub.cost || 0), 0).toLocaleString()} €</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    <nav className="bg-white border-t px-2 py-2 flex justify-around items-center z-50 shrink-0 shadow-lg">
+                        <button onClick={() => setView('projects')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'projects' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="home" size={20}/><span className="text-[8px] font-black uppercase mt-1">Projets</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('details')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'details' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="edit" size={20}/><span className="text-[8px] font-black uppercase mt-1">Détails</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('planning')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'planning' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="calendar" size={20}/><span className="text-[8px] font-black uppercase mt-1">Planning</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('tracking')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'tracking' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`}>
+                            <Icon name="list" size={20}/><span className="text-[8px] font-black uppercase mt-1">Suivi</span>
+                        </button>
+                        <button disabled={!activeProject} onClick={() => setView('budget')} className={`flex flex-col items-center p-2 rounded-2xl flex-1 ${view === 'budget' ? 'text-green-600 bg-green-50' : 'text-slate-400'}`}>
+                            <Icon name="wallet" size={20}/><span className="text-[8px] font-black uppercase mt-1">Budget</span>
+                        </button>
+                    </nav>
+
+                    {linkingTask && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setLinkingTask(null)}>
+                            <div className="bg-white w-full max-w-md rounded-[32px] p-6" onClick={e => e.stopPropagation()}>
+                                <h3 className="font-black text-xs mb-4 uppercase tracking-widest text-slate-400">Lier à une tâche précédente</h3>
+                                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                    <button onClick={() => { updateSubtask(linkingTask.tId, linkingTask.sId, { linkedTo: null }); setLinkingTask(null); }} className="w-full p-4 rounded-2xl bg-red-50 text-red-600 text-[10px] font-black mb-4">SUPPRIMER LIEN</button>
+                                    {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, taskTitle: t.title}))).filter(s => s.id !== linkingTask.sId).map(s => (
+                                        <button key={s.id} onClick={() => { updateSubtask(linkingTask.tId, linkingTask.sId, { linkedTo: s.id }); setLinkingTask(null); }} className="w-full text-left p-4 rounded-2xl border hover:bg-blue-50">
+                                            <p className="text-[9px] font-black text-blue-500">{s.taskTitle}</p><p className="font-bold">{s.title}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
