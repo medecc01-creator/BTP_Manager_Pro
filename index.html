@@ -163,21 +163,41 @@
             };
 
             const handlePhotoUpload = async (tId, sId, file) => {
-                if (!file) return;
-                setUploading(true);
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('upload_preset', UPLOAD_PRESET);
-                try {
-                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
-                    const data = await res.json();
-                    if (data.secure_url) {
-                        const currentPhotos = activeProject.tasks.find(t=>t.id===tId).subtasks.find(s=>s.id===sId).photos || [];
-                        await updateSubtask(tId, sId, { photos: [...currentPhotos, data.secure_url] });
-                    }
-                } catch (e) { alert("Limite Mémoire ! Utilisez l'APK pour les photos 12MP."); }
-                finally { setUploading(false); }
-            };
+    if (!file) return;
+    setUploading(true); // Active le chargement
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', UPLOAD_PRESET);
+
+    try {
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) throw new Error("Erreur serveur Cloudinary");
+
+        const data = await res.json();
+        
+        if (data.secure_url) {
+            // On récupère les photos actuelles pour ne pas les écraser
+            const currentSubtask = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId);
+            const currentPhotos = currentSubtask.photos || [];
+            
+            // Mise à jour locale et Firebase
+            await updateSubtask(tId, sId, { 
+                photos: [...currentPhotos, data.secure_url] 
+            });
+            console.log("Image enregistrée avec succès :", data.secure_url);
+        }
+    } catch (e) {
+        console.error("Erreur détaillée:", e);
+        alert("L'envoi a échoué. Vérifiez que votre Preset Cloudinary 'BTP_MP' est bien sur 'Unsigned' dans vos réglages Cloudinary.");
+    } finally {
+        setUploading(false); // Arrête le chargement quoi qu'il arrive
+    }
+};
 
             if (isCloudLoading) return <div className="h-screen flex items-center justify-center font-black text-slate-400 animate-pulse">SYNCHRONISATION...</div>;
 
