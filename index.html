@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BTP Manager Pro - Sync Optimisée</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
+
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -40,12 +43,10 @@
             saveData: async (data) => { 
                 await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); 
             },
-            // Récupération unique au démarrage
             fetchInitialData: async () => {
                 const { data } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
                 return data ? JSON.parse(data.content) : [];
             },
-            // Abonnement passif (ne fait que recevoir)
             subscribeData: (callback) => {
                 const channel = supabaseClient.channel('btp-global').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'btp_data', filter: 'id=eq.1' }, 
                 payload => { if(payload.new) callback(JSON.parse(payload.new.content)); }).subscribe();
@@ -90,7 +91,6 @@
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
             const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
 
-            // 1. Chargement initial
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => { 
                     if (session) {
@@ -100,18 +100,15 @@
                 });
             }, []);
 
-            // 2. Abonnement passif : reçoit les changements sans renvoyer
             useEffect(() => {
                 if (user) {
                     const unsubscribe = window.DatabaseOps.subscribeData((newData) => {
-                        // On ne met à jour l'état que si les données sont différentes (évite les boucles)
                         setProjects(newData);
                     });
                     return unsubscribe;
                 }
             }, [user]);
 
-            // 3. Seule fonction autorisée à envoyer des données
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects);
                 setIsSyncing(true);
