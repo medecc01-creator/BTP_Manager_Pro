@@ -53,7 +53,7 @@
         };
 
         function App() {
-            const [session, setSession] = useState(null);
+            const [session, setSession] = useState({ user: { email: 'test@btp.fr' } });
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [view, setView] = useState('projects');
