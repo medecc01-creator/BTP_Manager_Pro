@@ -132,10 +132,19 @@
                 fd.append('upload_preset', UPLOAD_PRESET);
                 const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
                 const json = await res.json();
-                const task = activeProject.tasks.find(t => t.id === tId);
-                const currentFiles = task.subtasks.find(s => s.id === sId)[field] || [];
+                const currentFiles = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId)[field] || [];
                 updateSub(tId, sId, { [field]: [...currentFiles, json.secure_url] });
             };
+
+            const ganttRange = useMemo(() => {
+                const subtasks = activeProject?.tasks?.flatMap(t => t.subtasks) || [];
+                const dates = subtasks.length > 0 ? subtasks.map(s => new Date(s.date)) : [new Date()];
+                const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 15);
+                const end = new Date(Math.max(...dates)); end.setDate(end.getDate() + 90);
+                const result = [];
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) result.push(new Date(d));
+                return result;
+            }, [activeProject]);
 
             if (!user || !activeProject) return null;
 
@@ -156,9 +165,9 @@
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
                         {currentView === 'budget' && (
-                            <div className="p-6 max-w-2xl mx-auto space-y-6">
-                                <div className="bg-slate-900 text-white p-8 rounded-[40px] text-center shadow-2xl font-black italic uppercase">
-                                    <p className="text-[10px] opacity-40 mb-1">Total HT</p>
+                            <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
+                                <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase border-4 border-white/5">
+                                    <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Total Prévisionnel HT</p>
                                     <p className="text-4xl">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + (parseFloat(sub.cost) || 0), 0), 0).toLocaleString()} €</p>
                                 </div>
                                 {activeProject.tasks.map(task => (
@@ -168,23 +177,23 @@
                                             <div key={sub.id} className="py-4 border-t border-slate-50 last:pb-0">
                                                 <div className="flex justify-between items-center mb-3">
                                                     <span className="text-xs font-bold uppercase text-slate-600">{sub.title}</span>
-                                                    <div className="flex items-center bg-slate-100 rounded-xl px-3">
+                                                    <div className="flex items-center bg-slate-50 rounded-xl px-3 border border-slate-100">
                                                         <input type="number" value={sub.cost || ''} onChange={e => updateSub(task.id, sub.id, {cost: e.target.value})} className="w-20 p-2 bg-transparent font-black text-xs text-right outline-none text-blue-600" placeholder="0"/>
-                                                        <span className="text-[10px] font-black text-slate-400">€</span>
+                                                        <span className="text-[10px] font-black text-slate-400 ml-1">€</span>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center justify-between bg-slate-50 p-2 rounded-2xl">
+                                                <div className="flex items-center justify-between bg-slate-50/50 p-2 rounded-2xl">
                                                     <div className="photo-stack cursor-pointer scale-75 origin-left" onClick={() => sub.invoices?.length && setViewer({photos: sub.invoices, index: sub.invoices.length-1, open: true, taskId: task.id, subId: sub.id, field: 'invoices'})}>
                                                         {(sub.invoices || []).slice(-3).map((url, i) => (
                                                             <div key={i} className="photo-stack-img flex items-center justify-center bg-white" style={{transform: `rotate(${i*8 - 4}deg)`, left: i*5+'px'}}>
-                                                                {url.toLowerCase().endsWith('.pdf') ? <Icon name="file" size={20} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover rounded-lg"/>}
+                                                                {url.endsWith('.pdf') ? <Icon name="file" size={20} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover rounded-lg"/>}
                                                             </div>
                                                         ))}
-                                                        {(!sub.invoices || sub.invoices.length === 0) && <div className="w-[45px] h-[45px] bg-white rounded-lg border flex items-center justify-center text-slate-200"><Icon name="file" size={18}/></div>}
+                                                        {(!sub.invoices || sub.invoices.length === 0) && <div className="w-[45px] h-[45px] bg-white rounded-lg flex items-center justify-center text-slate-200 border border-slate-200"><Icon name="file" size={18}/></div>}
                                                     </div>
-                                                    <label className="flex items-center gap-2 px-3 py-2 bg-blue-600 rounded-xl cursor-pointer shadow-md hover:bg-blue-700 transition-all">
-                                                        <Icon name="camera" size={14} color="white"/>
-                                                        <span className="text-[9px] font-black uppercase text-white">Ajouter</span>
+                                                    <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all">
+                                                        <Icon name="camera" size={14} color="#2563eb"/>
+                                                        <span className="text-[9px] font-black uppercase text-blue-600">Facture / Ticket</span>
                                                         <input type="file" className="hidden" accept="image/*,application/pdf" onChange={e => handleFileUpload(e, task.id, sub.id, 'invoices')}/>
                                                     </label>
                                                 </div>
@@ -195,7 +204,7 @@
                             </div>
                         )}
 
-                        {/* ... (Reste des vues: details, planning, tracking inchangés) ... */}
+                        {/* GARDER LES AUTRES VUES (details, planning, tracking) IDENTIQUES AU CODE PRÉCÉDENT */}
                         {currentView === 'details' && (
                              <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
                                 <h2 className="text-xl font-black uppercase italic editable" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
@@ -251,6 +260,50 @@
                                 )))}
                             </div>
                         )}
+                        
+                        {currentView === 'planning' && (
+                            <div className="flex flex-col h-full bg-white overflow-hidden">
+                                <div className="p-3 border-b flex justify-between items-center bg-slate-50 shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[8px] font-black opacity-40 uppercase tracking-tighter">Zoom</span>
+                                        <input type="range" min="10" max="100" value={ganttZoom} onChange={e => setGanttZoom(parseInt(e.target.value))} className="w-24 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
+                                    </div>
+                                </div>
+                                <div className="flex-1 custom-scrollbar-h">
+                                    <div className="inline-block min-w-full">
+                                        <div className="flex sticky top-0 z-40 bg-slate-800 text-white shadow-md">
+                                            <div className="w-32 shrink-0 p-3 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic">PLANNING</div>
+                                            {ganttRange.map((d, i) => (
+                                                <div key={i} style={{width: ganttZoom+'px'}} className="shrink-0 text-center py-1 border-r border-white/5">
+                                                    <div className="text-[9px] font-black">{d.getDate()}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {activeProject.tasks.map(task => (
+                                            <div key={task.id} className="border-b">
+                                                <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
+                                                {task.subtasks.map(sub => {
+                                                    const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
+                                                    return (
+                                                        <div key={sub.id} className="flex h-10 items-center relative border-t border-slate-50">
+                                                            <div className="w-32 shrink-0 px-3 text-[8px] font-bold text-slate-500 sticky-col left-0 z-30 border-r bg-white truncate">{sub.title}</div>
+                                                            {ganttRange.map((_, i) => <div key={i} style={{width: ganttZoom+'px'}} className="h-full shrink-0 border-r border-slate-50"></div>)}
+                                                            {startIdx !== -1 && (
+                                                                <div className="absolute h-5 bg-blue-600 rounded shadow-sm z-10 flex items-center justify-center overflow-hidden border border-blue-400" 
+                                                                    style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, sub.duration) * ganttZoom)+'px'}}>
+                                                                    <div className="h-full bg-green-500 absolute left-0 top-0 transition-all" style={{width: (sub.progress || 0)+'%'}}></div>
+                                                                    <span className="relative z-20 text-[7px] font-black text-white">{sub.progress || 0}%</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </main>
 
                     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
@@ -264,9 +317,9 @@
 
                     {dialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
-                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />}
+                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-lg" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
@@ -275,31 +328,45 @@
                         </div>
                     )}
 
-                    {viewer.open && (
-                        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
-                            <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-[110]">
-                                <button className="text-white bg-red-600 p-4 rounded-full" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
-                                    const list = [...viewer.photos]; list.splice(viewer.index, 1);
-                                    updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
-                                    if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
-                                }})}><Icon name="trash" size={20}/></button>
-                                <button className="text-white bg-white/10 p-4 rounded-full" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
+                    {linkDialog.open && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl max-h-[70vh] flex flex-col">
+                                <h3 className="text-lg font-black uppercase italic mb-4 text-center">Lier après :</h3>
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                    {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
+                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:bg-blue-50 transition-all" onClick={() => {
+                                            const d = new Date(other.date); d.setDate(d.getDate() + (parseInt(other.duration) || 0));
+                                            updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0], dependsOn: other.id });
+                                            setLinkDialog({ open: false });
+                                        }}>
+                                            <span className="text-[8px] font-black text-blue-600 uppercase block mb-1">{other.lot}</span>
+                                            <span className="font-bold text-xs">{other.title}</span>
+                                        </button>
+                                    ))}
+                                    <button className="w-full p-4 rounded-2xl border border-red-100 text-red-500 text-xs font-black uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, { dependsOn: null }); setLinkDialog({open: false}); }}>Supprimer le lien</button>
+                                </div>
+                                <button className="mt-4 py-4 w-full font-black uppercase text-slate-400" onClick={() => setLinkDialog({open: false})}>Fermer</button>
                             </div>
+                        </div>
+                    )}
 
-                            <div className="w-full h-full flex items-center justify-center">
-                                {viewer.photos[viewer.index]?.toLowerCase().endsWith('.pdf') ? (
-                                    <div className="text-center space-y-6">
-                                        <Icon name="file" size={100} color="white"/>
-                                        <p className="text-white font-black uppercase tracking-widest text-xs">Document PDF</p>
-                                        <a href={viewer.photos[viewer.index]} target="_blank" rel="noopener noreferrer" className="inline-block px-10 py-5 bg-blue-600 text-white font-black uppercase rounded-2xl shadow-2xl hover:bg-blue-700 transition-all">Ouvrir le PDF</a>
-                                    </div>
-                                ) : (
-                                    <img src={viewer.photos[viewer.index]} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" />
-                                )}
-                            </div>
+                    {viewer.open && (
+                        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+                            <button className="absolute top-6 left-6 text-white bg-red-600/80 p-4 rounded-full" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
+                                const list = [...viewer.photos]; list.splice(viewer.index, 1);
+                                updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
+                                if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
+                            }})}><Icon name="trash" size={20}/></button>
+                            <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
+                            {viewer.index > 0 && <button className="absolute left-4 text-white p-4" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
                             
-                            {viewer.index > 0 && <button className="absolute left-6 text-white p-4 bg-black/40 rounded-full" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={30}/></button>}
-                            {viewer.index < viewer.photos.length - 1 && <button className="absolute right-6 text-white p-4 bg-black/40 rounded-full" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={30}/></button>}
+                            {viewer.photos[viewer.index]?.endsWith('.pdf') ? (
+                                <iframe src={viewer.photos[viewer.index]} className="w-full h-full border-none bg-white"></iframe>
+                            ) : (
+                                <img src={viewer.photos[viewer.index]} className="max-w-full max-h-full object-contain" />
+                            )}
+                            
+                            {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
                         </div>
                     )}
                 </div>
