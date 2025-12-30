@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BTP Manager - Accueil</title>
-    
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
-
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -22,16 +20,12 @@
 </head>
 <body>
     <div id="root"></div>
-
     <script type="text/javascript">
         const SUPABASE_URL = 'https://ljitxlqkdkoaxgvfeuxh.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_p1t5UNCV5ODa0wNAM1LwYw_YmPIkRrl';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
         window.DatabaseOps = {
-            saveData: async (data) => { 
-                await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); 
-            },
+            saveData: async (data) => { await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); },
             fetchInitialData: async () => {
                 const { data } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
                 return data ? JSON.parse(data.content) : [];
@@ -43,10 +37,8 @@
             }
         };
     </script>
-
     <script type="text/babel">
         const { useState, useEffect } = React;
-        
         const Icon = ({ name, size = 20 }) => {
             const icons = {
                 edit: <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>,
@@ -65,18 +57,11 @@
 
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => { 
-                    if (session) {
-                        setUser(session.user);
-                        window.DatabaseOps.fetchInitialData().then(setProjects);
-                    }
+                    if (session) { setUser(session.user); window.DatabaseOps.fetchInitialData().then(setProjects); }
                 });
             }, []);
 
-            useEffect(() => {
-                if (user) {
-                    return window.DatabaseOps.subscribeData(setProjects);
-                }
-            }, [user]);
+            useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
 
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects);
@@ -85,7 +70,6 @@
                 setTimeout(() => setIsSyncing(false), 800);
             };
 
-            // Gestion de la connexion
             if (!user) return (
                 <div className="h-screen flex items-center justify-center bg-slate-900 p-6 text-center">
                     <form onSubmit={(e) => { e.preventDefault(); supabaseClient.auth.signInWithPassword(loginData).then(({data, error}) => error ? alert(error.message) : setUser(data.user)); }} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6">
@@ -97,7 +81,6 @@
                 </div>
             );
 
-            // Vue Liste des chantiers
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-800 bg-slate-50">
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 shadow-md">
@@ -110,29 +93,22 @@
                         </div>
                         <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-3 bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30 transition-all"><Icon name="logout" size={18}/></button>
                     </header>
-
                     <main className="flex-1 overflow-y-auto p-6 space-y-4 max-w-3xl mx-auto w-full">
                         <h2 className="text-2xl font-black italic uppercase text-slate-800 mt-4">Mes Chantiers</h2>
-                        
                         {projects.map(p => (
                             <div key={p.id} className="bg-white p-6 rounded-[28px] border shadow-sm flex justify-between items-center active:scale-95 transition-all group hover:border-blue-200">
-                                <a href={`gestion.html?id=${p.id}&view=details`} className="font-black uppercase text-slate-700 flex-1 cursor-pointer group-hover:text-blue-600 transition-colors">
-                                    {p.name}
-                                </a>
+                                <a href={`gestion.html?id=${p.id}&view=details`} className="font-black uppercase text-slate-700 flex-1 cursor-pointer group-hover:text-blue-600 transition-colors">{p.name}</a>
                                 <button onClick={() => setDialog({open: true, title: "Renommer Chantier", value: p.name, onConfirm: (v) => triggerSync(projects.map(proj => proj.id === p.id ? {...proj, name: v} : proj))})} className="p-2 text-slate-300 hover:text-blue-600 mr-2"><Icon name="edit" size={16}/></button>
                                 <a href={`gestion.html?id=${p.id}&view=details`} className="text-slate-400 group-hover:text-blue-600"><Icon name="right" size={18} /></a>
                             </div>
                         ))}
-                        
                         <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", onConfirm: (v) => triggerSync([...projects, {id: Date.now().toString(), name: v, tasks: []}])})} className="w-full p-10 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">+ Nouveau Chantier</button>
                     </main>
-
-                    {/* Modale simple pour inputs */}
                     {dialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
-                                <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />
+                                <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-lg" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
@@ -143,7 +119,6 @@
                 </div>
             );
         }
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
