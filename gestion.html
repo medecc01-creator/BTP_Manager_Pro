@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestion de Chantier</title>
-    
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
-
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -20,11 +18,7 @@
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 2px solid #e2e8f0; }
         .sticky-col { position: sticky; left: 0; z-index: 45; background: white; box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1); }
         .photo-stack { position: relative; width: 100px; height: 100px; margin-left: 10px; }
-        .photo-stack-img { 
-            position: absolute; width: 80px; height: 80px; object-fit: cover; 
-            border: 3px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.2); 
-            border-radius: 12px; transition: transform 0.3s ease;
-        }
+        .photo-stack-img { position: absolute; width: 80px; height: 80px; object-fit: cover; border: 3px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.2); border-radius: 12px; transition: transform 0.3s ease; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
         .sync-success { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
@@ -34,16 +28,12 @@
 </head>
 <body>
     <div id="root"></div>
-
     <script type="text/javascript">
         const SUPABASE_URL = 'https://ljitxlqkdkoaxgvfeuxh.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_p1t5UNCV5ODa0wNAM1LwYw_YmPIkRrl';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
         window.DatabaseOps = {
-            saveData: async (data) => { 
-                await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); 
-            },
+            saveData: async (data) => { await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); },
             fetchInitialData: async () => {
                 const { data } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
                 return data ? JSON.parse(data.content) : [];
@@ -55,7 +45,6 @@
             }
         };
     </script>
-
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
         const CLOUD_NAME = "dzhkqkzrg";
@@ -74,8 +63,7 @@
                 left: <path d="m15 18-6-6 6-6" />,
                 right: <path d="m9 18 6-6-6-6" />,
                 link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />,
-                x: <path d="M18 6 6 18M6 6l12 12" />,
-                logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                x: <path d="M18 6 6 18M6 6l12 12" />
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">{icons[name]}</svg>;
         };
@@ -84,12 +72,9 @@
             const [user, setUser] = useState(null);
             const [projects, setProjects] = useState([]);
             const [isSyncing, setIsSyncing] = useState(false);
-            
-            // Récupération des paramètres URL (ID et PAGE)
             const params = new URLSearchParams(window.location.search);
             const projectId = params.get('id');
-            const currentView = params.get('view') || 'details'; // 'details', 'planning', 'budget', 'tracking'
-
+            const currentView = params.get('view') || 'details';
             const [ganttZoom, setGanttZoom] = useState(40);
             const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null });
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
@@ -97,37 +82,48 @@
 
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => { 
-                    if (session) {
-                        setUser(session.user);
-                        window.DatabaseOps.fetchInitialData().then(setProjects);
-                    } else {
-                        window.location.href = 'index.html'; // Redirection si non connecté
-                    }
+                    if (session) { setUser(session.user); window.DatabaseOps.fetchInitialData().then(setProjects); } else { window.location.href = 'index.html'; }
                 });
             }, []);
 
-            useEffect(() => {
-                if (user) {
-                    return window.DatabaseOps.subscribeData((newData) => setProjects(newData));
-                }
-            }, [user]);
+            useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
 
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects);
                 setIsSyncing(true);
-                try { await window.DatabaseOps.saveData(updatedProjects); } catch (err) { console.error(err); }
+                await window.DatabaseOps.saveData(updatedProjects);
                 setTimeout(() => setIsSyncing(false), 800);
             };
 
             const activeProject = projects.find(p => p.id === projectId);
 
+            // Mise à jour d'une tâche avec cascade de dates
             const updateSub = (tId, sId, data) => {
-                const newProjects = projects.map(p => p.id === projectId ? {
+                let updatedProjects = projects.map(p => p.id === projectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
                         ...t, subtasks: sId === 'new' ? [...t.subtasks, data] : t.subtasks.map(s => s.id === sId ? {...s, ...data} : s)
                     } : t)
                 } : p);
-                triggerSync(newProjects);
+
+                // Cascade de dates : si une tâche a été modifiée, on vérifie si d'autres dépendent d'elle
+                if(sId !== 'new') {
+                    updatedProjects = updatedProjects.map(p => p.id === projectId ? {
+                        ...p, tasks: p.tasks.map(t => ({
+                            ...t, subtasks: t.subtasks.map(s => {
+                                if(s.dependsOn === sId) {
+                                    const parent = p.tasks.flatMap(ts => ts.subtasks).find(ts => ts.id === sId);
+                                    if(parent) {
+                                        const d = new Date(parent.date); 
+                                        d.setDate(d.getDate() + (parseInt(parent.duration) || 0));
+                                        return { ...s, date: d.toISOString().split('T')[0] };
+                                    }
+                                }
+                                return s;
+                            })
+                        }))
+                    } : p);
+                }
+                triggerSync(updatedProjects);
             };
 
             const moveItem = (type, taskId, subId, direction) => {
@@ -158,14 +154,17 @@
                 return result;
             }, [activeProject]);
 
-            if (!user || !activeProject) return <div className="p-10 text-center uppercase font-black text-slate-300">Chargement du chantier...</div>;
+            if (!user || !activeProject) return null;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-800">
                     <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50">
                         <div className="flex flex-col">
                             <h1 className="font-black italic text-xs uppercase tracking-tighter">BTP Manager Pro</h1>
-                            <div className="flex items-center mt-0.5"><span className={`status-dot ${isSyncing ? 'sync-loading' : 'sync-success'}`}></span><span className="text-[8px] font-black uppercase opacity-50 italic">{activeProject.name}</span></div>
+                            <div className="flex items-center mt-0.5">
+                                <span className={`status-dot ${isSyncing ? 'sync-loading' : 'sync-success'}`}></span>
+                                <span className="text-[8px] font-black uppercase opacity-50 italic">{isSyncing ? 'Synchronisation...' : activeProject.name}</span>
+                            </div>
                         </div>
                         <div className="flex gap-2">
                             <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white"><Icon name="home" size={18}/></a>
@@ -173,8 +172,6 @@
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
-                        
-                        {/* --- VUE: DETAILS (LOTS) --- */}
                         {currentView === 'details' && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
                                 <h2 className="text-xl font-black uppercase italic editable" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
@@ -198,7 +195,7 @@
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-center mb-2 font-black text-xs uppercase">
-                                                        <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
+                                                        <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title} {sub.dependsOn && <span className="text-[8px] text-blue-400">🔗</span>}</span>
                                                         <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className="text-blue-500 bg-white p-2 rounded-xl border border-blue-50 shadow-sm active:scale-90 transition-transform"><Icon name="link" size={12}/></button>
                                                     </div>
                                                     <div className="flex gap-2">
@@ -215,7 +212,6 @@
                             </div>
                         )}
 
-                        {/* --- VUE: PLANNING --- */}
                         {currentView === 'planning' && (
                             <div className="flex flex-col h-full bg-white overflow-hidden">
                                 <div className="p-3 border-b flex justify-between items-center bg-slate-50 shrink-0">
@@ -233,9 +229,7 @@
                                                 const showMonth = i === 0 || d.getDate() === 1;
                                                 return (
                                                     <div key={i} style={{width: ganttZoom+'px'}} className={`shrink-0 text-center py-1 border-r border-white/5 ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-white/5' : ''}`}>
-                                                        <div className="text-[6px] uppercase opacity-40 font-bold h-2">
-                                                            {showMonth ? `${d.toLocaleDateString('fr-FR', {month: 'short'})} ${d.getFullYear()}` : ''}
-                                                        </div>
+                                                        <div className="text-[6px] uppercase opacity-40 font-bold h-2">{showMonth ? `${d.toLocaleDateString('fr-FR', {month: 'short'})} ${d.getFullYear()}` : ''}</div>
                                                         <div className="text-[9px] font-black">{d.getDate()}</div>
                                                     </div>
                                                 );
@@ -270,7 +264,6 @@
                             </div>
                         )}
 
-                        {/* --- VUE: BUDGET --- */}
                         {currentView === 'budget' && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
                                 <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase relative overflow-hidden border-4 border-white/5">
@@ -294,7 +287,6 @@
                             </div>
                         )}
 
-                        {/* --- VUE: SUIVI (TRACKING) --- */}
                         {currentView === 'tracking' && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
                                 {activeProject.tasks.map(task => task.subtasks.map(sub => (
@@ -327,7 +319,6 @@
                         )}
                     </main>
 
-                    {/* --- NAVIGATION BAR --- */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
                         {[{id: 'details', icon: 'edit', label: 'Lots'}, {id: 'planning', icon: 'calendar', label: 'Planning'}, {id: 'tracking', icon: 'camera', label: 'Suivi'}, {id: 'budget', icon: 'wallet', label: 'Budget'}].map(item => (
                             <a key={item.id} href={`gestion.html?id=${projectId}&view=${item.id}`} className={`flex flex-col items-center flex-1 transition-all ${currentView === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
@@ -337,12 +328,11 @@
                         ))}
                     </nav>
 
-                    {/* --- DIALOGS & MODALS --- */}
                     {dialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
-                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
+                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-lg" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
@@ -353,19 +343,20 @@
 
                     {linkDialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl max-h-[70vh] flex flex-col text-slate-800">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl max-h-[70vh] flex flex-col">
                                 <h3 className="text-lg font-black uppercase italic mb-4 text-center">Lier après :</h3>
                                 <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                                     {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
                                         <button key={other.id} className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:bg-blue-50 transition-all" onClick={() => {
                                             const d = new Date(other.date); d.setDate(d.getDate() + (parseInt(other.duration) || 0));
-                                            updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0] });
+                                            updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0], dependsOn: other.id });
                                             setLinkDialog({ open: false });
                                         }}>
                                             <span className="text-[8px] font-black text-blue-600 uppercase block mb-1">{other.lot}</span>
                                             <span className="font-bold text-xs">{other.title}</span>
                                         </button>
                                     ))}
+                                    <button className="w-full p-4 rounded-2xl border border-red-100 text-red-500 text-xs font-black uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, { dependsOn: null }); setLinkDialog({open: false}); }}>Supprimer le lien</button>
                                 </div>
                                 <button className="mt-4 py-4 w-full font-black uppercase text-slate-400" onClick={() => setLinkDialog({open: false})}>Fermer</button>
                             </div>
@@ -388,7 +379,6 @@
                 </div>
             );
         }
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
