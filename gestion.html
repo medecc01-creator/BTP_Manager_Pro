@@ -378,7 +378,7 @@
                                                 ))}
                                             </div>
                                             <div className="flex">
-                                                <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic flex items-center justify-center">GRILLE</div>
+                                                <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic flex items-center justify-center uppercase">Lots / Tâches</div>
                                                 {ganttRange.map((d, i) => (
                                                     <div key={i} style={{width: ganttZoom+'px'}} className={`shrink-0 text-center py-1 border-r border-white/5 ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-slate-700/50' : ''}`}>
                                                         <div className="text-[9px] font-black opacity-60">{d.getDate()}</div>
@@ -394,7 +394,7 @@
 
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
-                                                    <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
+                                                    <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
                                                     {task.subtasks.map(sub => {
                                                         const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
                                                         const endDate = addBusinessDays(sub.date, sub.duration);
@@ -402,7 +402,8 @@
                                                         
                                                         return (
                                                             <div key={sub.id} className="flex h-10 items-center relative border-t border-slate-50">
-                                                                <div className="w-32 shrink-0 px-3 text-[8px] font-bold text-slate-500 sticky-col left-0 z-30 border-r bg-white truncate">{sub.title}</div>
+                                                                {/* Taille de police augmentée de 30% ici (text-[11px] au lieu de 8px) */}
+                                                                <div className="w-32 shrink-0 px-3 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r bg-white truncate leading-none">{sub.title}</div>
                                                                 {ganttRange.map((d, i) => (
                                                                     <div key={i} style={{width: ganttZoom+'px'}} className={`h-full shrink-0 border-r border-slate-50 ${d.getDay() === 0 || d.getDay() === 6 ? 'weekend-cell' : ''}`}></div>
                                                                 ))}
@@ -492,7 +493,6 @@
                                 <>
                                     <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase shadow-lg" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
                                     
-                                    {/* NOM DU FICHIER EN HAUT */}
                                     <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[105] bg-black/50 px-6 py-2 rounded-full border border-white/10 backdrop-blur-md max-w-[250px]">
                                         <p className="text-white text-[10px] font-black uppercase tracking-widest truncate">{getFileData(viewer.photos[viewer.index]).name}</p>
                                     </div>
