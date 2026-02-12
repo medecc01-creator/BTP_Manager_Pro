@@ -25,6 +25,30 @@
             background-image: repeating-linear-gradient(45deg, #f1f5f9 0px, #f1f5f9 2px, transparent 2px, transparent 8px);
         }
 
+        .today-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #ef4444;
+            z-index: 40;
+            pointer-events: none;
+        }
+        .today-badge {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ef4444;
+            color: white;
+            font-size: 7px;
+            font-weight: 900;
+            padding: 2px 4px;
+            border-radius: 4px;
+            white-space: nowrap;
+            text-transform: uppercase;
+        }
+
         .photo-stack { position: relative; width: 60px; height: 60px; }
         .photo-stack-img { position: absolute; width: 45px; height: 45px; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-radius: 8px; background: #fff; }
         
@@ -204,14 +228,13 @@
                 const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
                 const json = await res.json();
                 const currentFiles = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId)[field] || [];
-                // Nouveaux fichiers ajoutés à la fin du tableau source
                 updateSub(tId, sId, { [field]: [...currentFiles, { url: json.secure_url, name: originalName }] });
             };
 
             const ganttRange = useMemo(() => {
                 const subtasks = activeProject?.tasks?.flatMap(t => t.subtasks) || [];
                 const dates = subtasks.length > 0 ? subtasks.map(s => new Date(s.date)) : [new Date()];
-                const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 5);
+                const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 10);
                 const end = new Date(Math.max(...dates)); end.setDate(end.getDate() + 90);
                 const result = []; for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) result.push(new Date(d));
                 return result;
@@ -227,9 +250,14 @@
                 return ms;
             }, [ganttRange]);
 
+            // Calcul de la position de la ligne "Aujourd'hui"
+            const todayIdx = useMemo(() => {
+                const today = new Date().toDateString();
+                return ganttRange.findIndex(d => d.toDateString() === today);
+            }, [ganttRange]);
+
             if (!user || !activeProject) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Chargement...</div>;
 
-            // Inversion des documents pour affichage (plus récent en premier)
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
 
             return (
@@ -395,6 +423,13 @@
                                         </div>
 
                                         <div className="relative">
+                                            {/* Ligne Rouge Aujourd'hui */}
+                                            {todayIdx !== -1 && (
+                                                <div className="today-line" style={{left: (128 + (todayIdx * ganttZoom) + (ganttZoom / 2) - 1) + 'px'}}>
+                                                    <div className="today-badge">Aujourd'hui</div>
+                                                </div>
+                                            )}
+
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex">
@@ -472,7 +507,7 @@
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full z-[350]" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
                             {viewer.mode === 'grid' ? (
                                 <div className="w-full h-full p-6 overflow-y-auto pt-20 pb-32">
-                                    <h3 className="text-white text-center font-black uppercase text-xl mb-6 italic">Galerie (Derniers ajouts en haut)</h3>
+                                    <h3 className="text-white text-center font-black uppercase text-xl mb-6 italic">Galerie</h3>
                                     <div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
                                         {sortedDocs.map((file, idx) => {
                                             const { url, name } = getFileData(file);
@@ -506,7 +541,6 @@
                                             setDialog({
                                                 open: true, title: "Supprimer ce fichier ?", type: 'confirm', 
                                                 onConfirm: () => {
-                                                    // On retrouve l'index réel dans le tableau d'origine
                                                     const realIndex = (viewer.photos.length - 1) - viewer.index;
                                                     const list = [...viewer.photos]; list.splice(realIndex, 1);
                                                     updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
