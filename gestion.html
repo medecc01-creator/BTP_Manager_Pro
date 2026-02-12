@@ -86,10 +86,24 @@
 
             // Aide pour extraire URL et Nom de manière hybride
             const getFileData = (file) => {
-                if (typeof file === 'object' && file !== null) {
+                if (!file) return { url: '', name: 'Fichier' };
+                if (typeof file === 'object' && file.url) {
                     return { url: file.url, name: file.name || 'Fichier' };
                 }
-                return { url: file, name: 'Ancien fichier' };
+                return { url: file, name: 'Fichier' };
+            };
+
+            // Fonction pour forcer le téléchargement via Cloudinary
+            const downloadFile = (file) => {
+                const { url, name } = getFileData(file);
+                // On remplace /upload/ par /upload/fl_attachment/ pour forcer le téléchargement
+                const downloadUrl = url.replace('/upload/', '/upload/fl_attachment/');
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.setAttribute('download', name);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             };
 
             useEffect(() => {
@@ -110,7 +124,7 @@
             const activeProject = projects.find(p => p.id === projectId);
 
             const getDependencyInfo = (dependsOnId) => {
-                if (!dependsOnId) return null;
+                if (!dependsOnId || !activeProject) return null;
                 for (const t of activeProject.tasks) {
                     const s = t.subtasks.find(sub => sub.id === dependsOnId);
                     if (s) return { lot: t.title, task: s.title };
@@ -185,7 +199,6 @@
                 const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
                 const json = await res.json();
                 const currentFiles = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId)[field] || [];
-                // On enregistre maintenant l'objet avec l'URL et le nom d'origine
                 updateSub(tId, sId, { [field]: [...currentFiles, { url: json.secure_url, name: originalName }] });
             };
 
@@ -222,7 +235,7 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (!user || !activeProject) return null;
+            if (!user || !activeProject) return <div className="h-screen w-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Chargement...</div>;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-800">
@@ -510,7 +523,7 @@
                                 <div className="w-full h-full p-6 overflow-y-auto">
                                     <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10">Galerie</h3>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 max-w-2xl mx-auto">
-                                        {viewer.photos.map((file, idx) => {
+                                        {(viewer.photos || []).map((file, idx) => {
                                             const { url, name } = getFileData(file);
                                             const isPdf = url.toLowerCase().endsWith('.pdf');
                                             return (
@@ -531,19 +544,19 @@
                             {viewer.mode === 'view' && (
                                 <>
                                     {(() => {
-                                        const { url, name } = getFileData(viewer.photos[viewer.index]);
+                                        const currentFile = viewer.photos[viewer.index];
+                                        const { url, name } = getFileData(currentFile);
                                         const isPdf = url.toLowerCase().endsWith('.pdf');
                                         return (
                                             <>
                                                 <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
                                                 
                                                 <div className="absolute bottom-10 right-6 flex gap-3 z-[110]">
-                                                    {/* BOUTON TELECHARGER */}
-                                                    <a href={url} download={name} target="_blank" className="bg-green-600 text-white p-4 rounded-full shadow-lg flex items-center justify-center">
+                                                    {/* BOUTON TELECHARGER AMELIORE */}
+                                                    <button onClick={() => downloadFile(currentFile)} className="bg-green-600 text-white p-4 rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform">
                                                         <Icon name="download" size={20}/>
-                                                    </a>
+                                                    </button>
                                                     
-                                                    {/* BOUTON SUPPRIMER */}
                                                     <button className="text-white bg-red-600/80 p-4 rounded-full" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
                                                         const list = [...viewer.photos]; list.splice(viewer.index, 1);
                                                         updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
