@@ -15,8 +15,6 @@
         .sync-success { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -33,19 +31,25 @@
             },
             fetchInitialData: async () => {
                 const { data } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
-                if (!data) return { projects: [], members: [] };
+                if (!data || !data.content) return { projects: [], members: [] };
                 try {
                     const parsed = JSON.parse(data.content);
-                    return {
-                        projects: parsed.projects || (Array.isArray(parsed) ? parsed : []),
-                        members: parsed.members || []
-                    };
+                    // LOGIQUE DE RÉCUPÉRATION : 
+                    // 1. Si c'est déjà le bon format {projects: [...]}
+                    if (parsed && parsed.projects) {
+                        return { projects: parsed.projects, members: parsed.members || [] };
+                    }
+                    // 2. Si c'est l'ancien format (juste un tableau de chantiers)
+                    if (Array.isArray(parsed)) {
+                        return { projects: parsed, members: [] };
+                    }
+                    return { projects: [], members: [] };
                 } catch(e) { return { projects: [], members: [] }; }
             },
             subscribeData: (callback) => {
                 const channel = supabaseClient.channel('btp-global').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'btp_data', filter: 'id=eq.1' }, 
                 payload => { 
-                    if(payload.new) {
+                    if(payload.new && payload.new.content) {
                         const parsed = JSON.parse(payload.new.content);
                         callback({
                             projects: parsed.projects || (Array.isArray(parsed) ? parsed : []),
@@ -90,7 +94,9 @@
                 supabaseClient.auth.getSession().then(({ data: { session } }) => {
                     if (session) {
                         setUser(session.user);
-                        window.DatabaseOps.fetchInitialData().then(setData);
+                        window.DatabaseOps.fetchInitialData().then(initial => {
+                            setData(initial);
+                        });
                     }
                     setLoading(false);
                 });
@@ -116,15 +122,15 @@
                 }
             };
 
-            if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white font-black uppercase text-xs animate-pulse">Chargement...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white font-black text-xs animate-pulse uppercase">Chargement...</div>;
 
             if (!user) return (
                 <div className="h-screen flex items-center justify-center bg-slate-900 p-6">
                     <form onSubmit={handleLogin} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6">
-                        <h2 className="text-3xl font-black uppercase italic text-center text-slate-800">BTP Manager</h2>
-                        <input type="email" placeholder="Email" className="w-full p-4 bg-slate-100 rounded-2xl font-bold outline-none ring-blue-50 focus:ring-2 focus:ring-blue-500 transition-all" onChange={e => setLoginData({...loginData, email: e.target.value})} required />
-                        <input type="password" placeholder="Pass" className="w-full p-4 bg-slate-100 rounded-2xl font-bold outline-none ring-blue-50 focus:ring-2 focus:ring-blue-500 transition-all" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
-                        <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase shadow-lg active:scale-95 transition-all">Connexion</button>
+                        <h2 className="text-3xl font-black uppercase italic text-center">BTP Manager</h2>
+                        <input type="email" placeholder="Email" className="w-full p-4 bg-slate-100 rounded-2xl font-bold outline-none" onChange={e => setLoginData({...loginData, email: e.target.value})} required />
+                        <input type="password" placeholder="Pass" className="w-full p-4 bg-slate-100 rounded-2xl font-bold outline-none" onChange={e => setLoginData({...loginData, password: e.target.value})} required />
+                        <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase">Connexion</button>
                     </form>
                 </div>
             );
@@ -141,43 +147,43 @@
                         </div>
                         <div className="flex gap-2">
                             {user.email === ADMIN_EMAIL && (
-                                <button onClick={() => setShowAdmin(true)} className="p-3 bg-blue-500/20 text-blue-400 rounded-xl active:scale-90 transition-all"><Icon name="settings"/></button>
+                                <button onClick={() => setShowAdmin(true)} className="p-3 bg-blue-500/20 text-blue-400 rounded-xl"><Icon name="settings"/></button>
                             )}
-                            <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-3 bg-red-500/20 text-red-400 rounded-xl active:scale-90 transition-all"><Icon name="logout"/></button>
+                            <button onClick={() => { supabaseClient.auth.signOut(); setUser(null); }} className="p-3 bg-red-500/20 text-red-400 rounded-xl"><Icon name="logout"/></button>
                         </div>
                     </header>
 
                     <main className="flex-1 overflow-y-auto p-6 space-y-4 max-w-2xl mx-auto w-full">
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter">Mes Chantiers</h2>
                         {data.projects.map(p => (
-                            <div key={p.id} className="bg-white p-6 rounded-[28px] border flex justify-between items-center shadow-sm active:scale-[0.98] transition-all group">
+                            <div key={p.id} className="bg-white p-6 rounded-[28px] border flex justify-between items-center shadow-sm">
                                 <a href={`gestion.html?id=${p.id}`} className="font-black uppercase text-slate-700 flex-1 truncate mr-4">{p.name}</a>
                                 <div className="flex items-center">
                                     {user.email === ADMIN_EMAIL && (
-                                        <button onClick={() => setDialog({open: true, title: "Renommer Chantier", value: p.name, onConfirm: (v) => triggerSync({...data, projects: data.projects.map(proj => proj.id === p.id ? {...proj, name: v} : proj)})})} className="p-2 text-slate-300 hover:text-blue-500 mr-2 transition-colors"><Icon name="edit" size={16}/></button>
+                                        <button onClick={() => setDialog({open: true, title: "Renommer Chantier", value: p.name, onConfirm: (v) => triggerSync({...data, projects: data.projects.map(proj => proj.id === p.id ? {...proj, name: v} : proj)})})} className="p-2 text-slate-300 mr-2"><Icon name="edit" size={16}/></button>
                                     )}
-                                    <a href={`gestion.html?id=${p.id}`} className="text-slate-400 group-hover:text-blue-600 transition-colors"><Icon name="right" size={18} /></a>
+                                    <a href={`gestion.html?id=${p.id}`} className="text-slate-400"><Icon name="right" size={18} /></a>
                                 </div>
                             </div>
                         ))}
                         {user.email === ADMIN_EMAIL && (
-                            <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", onConfirm: (v) => triggerSync({...data, projects: [...data.projects, {id: Date.now().toString(), name: v, tasks: []}]})})} className="w-full p-10 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">+ Nouveau Chantier</button>
+                            <button onClick={() => setDialog({open: true, title: "Nom du chantier ?", value: "", onConfirm: (v) => triggerSync({...data, projects: [...data.projects, {id: Date.now().toString(), name: v, tasks: []}]})})} className="w-full p-10 border-2 border-dashed border-slate-300 rounded-[28px] text-slate-400 font-black uppercase hover:border-blue-400">+ Nouveau Chantier</button>
                         )}
                     </main>
 
                     {showAdmin && (
                         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md p-6 flex items-center justify-center">
-                            <div className="bg-white w-full max-w-lg rounded-[40px] p-8 shadow-2xl max-h-[85vh] flex flex-col relative">
+                            <div className="bg-white w-full max-w-lg rounded-[40px] p-8 shadow-2xl max-h-[85vh] flex flex-col">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-xl font-black uppercase italic">Gestion des Accès</h3>
                                     <button onClick={() => setShowAdmin(false)} className="bg-slate-100 px-4 py-2 rounded-full text-slate-400 font-bold text-[10px] uppercase">Fermer</button>
                                 </div>
-                                <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                                     {data.members.map(m => (
-                                        <div key={m.email} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div key={m.email} className="p-4 bg-slate-50 rounded-2xl border">
                                             <div className="flex justify-between items-center mb-3">
-                                                <span className="font-bold text-[11px] text-slate-600 uppercase truncate mr-2 italic">{m.email}</span>
-                                                <button onClick={() => triggerSync({...data, members: data.members.filter(mem => mem.email !== m.email)})} className="text-red-400 active:scale-90 transition-all"><Icon name="trash" size={16}/></button>
+                                                <span className="font-bold text-[10px] text-slate-600 uppercase truncate mr-2 italic">{m.email}</span>
+                                                <button onClick={() => triggerSync({...data, members: data.members.filter(mem => mem.email !== m.email)})} className="text-red-400"><Icon name="trash" size={16}/></button>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {['details', 'planning', 'tracking', 'budget'].map(tab => (
@@ -187,7 +193,7 @@
                                                             const newAccess = m.access.includes(tab) ? m.access.filter(a => a !== tab) : [...m.access, tab];
                                                             triggerSync({...data, members: data.members.map(mem => mem.email === m.email ? {...mem, access: newAccess} : mem)});
                                                         }}
-                                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all shadow-sm ${m.access.includes(tab) ? 'bg-blue-600 text-white' : 'bg-white border text-slate-300'}`}
+                                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${m.access.includes(tab) ? 'bg-blue-600 text-white' : 'bg-white border text-slate-300'}`}
                                                     >
                                                         {tab}
                                                     </button>
@@ -195,24 +201,20 @@
                                             </div>
                                         </div>
                                     ))}
-                                    {data.members.length === 0 && <p className="text-center text-slate-400 text-[10px] py-10 uppercase font-bold italic tracking-widest">Aucun membre autorisé</p>}
                                 </div>
-                                <button onClick={() => setDialog({open: true, title: "Email du membre ?", value: "", onConfirm: (v) => {
-                                    if(v && v.includes('@')) triggerSync({...data, members: [...data.members, {email: v.toLowerCase().trim(), access: ['details']}]});
-                                    else alert("Email invalide");
-                                }})} className="mt-6 w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase shadow-lg active:scale-95 transition-all">+ Ajouter Membre</button>
+                                <button onClick={() => setDialog({open: true, title: "Email du membre ?", value: "", onConfirm: (v) => triggerSync({...data, members: [...data.members, {email: v.toLowerCase().trim(), access: ['details']}]})})} className="mt-6 w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase">+ Ajouter Membre</button>
                             </div>
                         </div>
                     )}
 
                     {dialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-                                <h3 className="text-lg font-black uppercase mb-6 text-center italic tracking-tighter text-slate-800">{dialog.title}</h3>
-                                <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500 transition-all" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => e.key === 'Enter' && (dialog.onConfirm(dialog.value), setDialog({...dialog, open: false}))} />
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
+                                <h3 className="text-lg font-black uppercase mb-6 text-center italic">{dialog.title}</h3>
+                                <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => e.key === 'Enter' && (dialog.onConfirm(dialog.value), setDialog({...dialog, open: false}))} />
                                 <div className="flex gap-3">
-                                    <button className="flex-1 py-4 font-black uppercase text-slate-400 hover:text-slate-600" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
-                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-blue-200 shadow-xl active:scale-95 transition-all" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
+                                    <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
+                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
                                 </div>
                             </div>
                         </div>
