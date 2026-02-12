@@ -139,6 +139,7 @@
             const [user, setUser] = useState(null);
             const [projects, setProjects] = useState([]);
             const [isSyncing, setIsSyncing] = useState(false);
+            const [isLoading, setIsLoading] = useState(true);
             const [draggedItem, setDraggedItem] = useState(null);
             
             const params = new URLSearchParams(window.location.search);
@@ -168,10 +169,20 @@
                 window.location.href = 'index.html';
             };
 
+            // Écouteur de session amélioré
             useEffect(() => {
-                supabaseClient.auth.getSession().then(({ data: { session } }) => { 
-                    if (session) { setUser(session.user); window.DatabaseOps.fetchInitialData().then(setProjects); } else { window.location.href = 'index.html'; }
+                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                    if (session) {
+                        setUser(session.user);
+                        const data = await window.DatabaseOps.fetchInitialData();
+                        setProjects(data);
+                        setIsLoading(false);
+                    } else {
+                        window.location.href = 'index.html';
+                    }
                 });
+
+                return () => subscription.unsubscribe();
             }, []);
 
             useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
@@ -261,7 +272,7 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (!user || !activeProject) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Chargement...</div>;
+            if (isLoading || !activeProject) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Chargement des données...</div>;
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
 
@@ -485,7 +496,7 @@
 
                     {dialog.open && (
                         <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
+                            <div className="bg-white w-full max-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
                                 {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none focus:ring-2 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
                                 <div className="flex gap-3">
