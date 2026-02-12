@@ -123,22 +123,22 @@
                 window.location.href = 'index.html';
             };
 
-            // Écouteur de session et chargement forcé des données
+            // Initialisation robuste de la session
             useEffect(() => {
-                const init = async () => {
+                const checkSession = async () => {
                     const { data: { session } } = await supabaseClient.auth.getSession();
                     if (session) {
                         setUser(session.user);
-                        const data = await window.DatabaseOps.fetchInitialData();
-                        setProjects(data);
+                        const initialData = await window.DatabaseOps.fetchInitialData();
+                        setProjects(initialData);
                         setIsLoading(false);
                     } else {
-                        // Si pas de session en cache, on écoute le changement
+                        // On écoute les changements si pas encore de session
                         const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
                             if (session) {
                                 setUser(session.user);
-                                const data = await window.DatabaseOps.fetchInitialData();
-                                setProjects(data);
+                                const initialData = await window.DatabaseOps.fetchInitialData();
+                                setProjects(initialData);
                                 setIsLoading(false);
                             } else if (event === 'SIGNED_OUT') {
                                 window.location.href = 'index.html';
@@ -147,10 +147,13 @@
                         return () => subscription.unsubscribe();
                     }
                 };
-                init();
+                checkSession();
             }, []);
 
-            useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
+            // Abonnement aux données en temps réel
+            useEffect(() => { 
+                if (user) return window.DatabaseOps.subscribeData(setProjects); 
+            }, [user]);
 
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects); setIsSyncing(true);
@@ -240,7 +243,7 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Initialisation...</div>;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Synchronisation...</div>;
             if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4"><div className="font-black uppercase text-xs text-slate-400">Projet introuvable</div><a href="index.html" className="px-6 py-2 bg-blue-600 text-white rounded-full font-bold text-xs uppercase">Retour</a></div>;
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
