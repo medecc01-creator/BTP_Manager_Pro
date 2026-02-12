@@ -38,15 +38,18 @@
             top: 50%;
             transform: translateY(-50%);
             z-index: 300;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.3);
             color: white;
-            padding: 20px;
+            padding: 16px;
             border-radius: 50%;
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.2);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.1);
             transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .viewer-nav-btn:hover { background: #2563eb; transform: translateY(-50%) scale(1.1); }
+        .viewer-nav-btn:active { background: #2563eb; transform: translateY(-50%) scale(0.9); }
         .viewer-nav-btn:disabled { opacity: 0; pointer-events: none; }
         
         .editable:hover { color: #2563eb; cursor: pointer; text-decoration: underline; }
@@ -97,7 +100,7 @@
                 camera: <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
                 trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />,
                 left: <path d="m15 18-6-6 6-6" />,
-                right: <path d="m9 18 6-6 6-6" />,
+                right: <path d="m9 6 6 6-6 6" />, // Version miroir corrigée
                 link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />,
                 x: <path d="M18 6 6 18M6 6l12 12" />,
                 file: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>,
