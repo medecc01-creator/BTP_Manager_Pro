@@ -16,25 +16,7 @@
         .custom-scrollbar-h::-webkit-scrollbar { height: 14px !important; display: block !important; }
         .custom-scrollbar-h::-webkit-scrollbar-track { background: #e2e8f0; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 2px solid #e2e8f0; }
-        
-        /* OPACITÉ RADICALE POUR LA COLONNE GAUCHE */
-        .sticky-col { 
-            position: sticky; 
-            left: 0; 
-            z-index: 45; /* Plus haut que les barres de planning */
-            background-color: white !important;
-            box-shadow: 4px 0 10px -5px rgba(0,0,0,0.2);
-        }
-
-        /* Bouclier anti-transparence supplémentaire */
-        .sticky-col::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: white;
-            z-index: -1;
-        }
-
+        .sticky-col { position: sticky; left: 0; z-index: 45; background-color: white !important; opacity: 1 !important; box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1); }
         .photo-stack { position: relative; width: 60px; height: 60px; }
         .photo-stack-img { position: absolute; width: 45px; height: 45px; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-radius: 8px; transition: transform 0.3s ease; background: #fff; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
@@ -388,7 +370,6 @@
                                     <div className="inline-block min-w-full">
                                         <div className="sticky top-0 z-50 bg-slate-800 text-white shadow-md">
                                             <div className="flex border-b border-white/10">
-                                                {/* Colonne d'entête Lot : Z-60 pour être au dessus de tout */}
                                                 <div className="w-32 shrink-0 bg-slate-800 sticky left-0 z-[60] border-r border-white/10"></div>
                                                 {months.map((m, i) => (
                                                     <div key={i} style={{width: (m.count * ganttZoom) + 'px'}} className="shrink-0 text-center py-1 border-r border-white/5 bg-slate-800/50">
@@ -414,8 +395,7 @@
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex bg-blue-50/40">
-                                                        {/* Colonne Lot Opaque */}
-                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 border-r">
+                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r bg-white">
                                                             {task.title}
                                                         </div>
                                                     </div>
@@ -425,9 +405,9 @@
                                                         const diffInDays = Math.ceil((endDate - new Date(sub.date)) / (1000 * 60 * 60 * 24));
                                                         
                                                         return (
+                                                            /* Passage à h-8 pour réduire l'espace entre les tâches */
                                                             <div key={sub.id} className="flex h-8 items-center relative border-t border-slate-50">
-                                                                {/* Colonne Tâche Opaque */}
-                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 border-r truncate flex items-center">
+                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r bg-white truncate flex items-center">
                                                                     {sub.title}
                                                                 </div>
                                                                 {ganttRange.map((d, i) => (
