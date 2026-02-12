@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BTP Manager Pro</title>
+    <title>BTP Manager Pro - Gestion</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -43,7 +43,9 @@
             saveData: async (data) => { await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); },
             fetchInitialData: async () => {
                 const { data } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
-                return data ? JSON.parse(data.content) : [];
+                if (!data) return { projects: [], members: [] };
+                const parsed = JSON.parse(data.content);
+                return Array.isArray(parsed) ? { projects: parsed, members: [] } : parsed;
             },
             subscribeData: (callback) => {
                 const channel = supabaseClient.channel('btp-global').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'btp_data', filter: 'id=eq.1' }, 
@@ -56,6 +58,7 @@
         const { useState, useEffect, useMemo } = React;
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
+        const ADMIN_EMAIL = "medecc01@gmail.com";
 
         const addBusinessDays = (startDate, days) => {
             let date = new Date(startDate);
@@ -90,63 +93,26 @@
         };
 
         function App() {
-    const [user, setUser] = useState(null);
-    const [data, setData] = useState({ projects: [], members: [] }); // Changement ici : on utilise 'data'
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    // ... garder les autres states (draggedItem, viewer, etc.) ...
+            const [user, setUser] = useState(null);
+            const [data, setData] = useState({ projects: [], members: [] });
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [isLoading, setIsLoading] = useState(true);
+            const [draggedItem, setDraggedItem] = useState(null);
+            
+            const params = new URLSearchParams(window.location.search);
+            const projectId = params.get('id');
+            const currentView = params.get('view') || 'details';
+            
+            const [ganttZoom, setGanttZoom] = useState(40);
+            const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null, field: 'photos', mode: 'view' }); 
+            const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
+            const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
 
-    const ADMIN_EMAIL = "medecc01@gmail.com";
-
-    useEffect(() => {
-        const checkSession = async () => {
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session) {
-                setUser(session.user);
-                const initial = await window.DatabaseOps.fetchInitialData();
-                setData(initial);
-                setIsLoading(false);
-            }
-        };
-        checkSession();
-    }, []);
-
-    // Abonnement temps réel
-    useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setData); }, [user]);
-
-    // Calcul des onglets autorisés
-    const userAccess = useMemo(() => {
-        if (!user) return [];
-        if (user.email === ADMIN_EMAIL) return ['details', 'planning', 'tracking', 'budget'];
-        const member = data.members.find(m => m.email === user.email);
-        return member ? member.access : ['details']; // Par défaut juste les lots
-    }, [user, data.members]);
-
-    const activeProject = useMemo(() => data.projects.find(p => p.id === projectId), [data.projects, projectId]);
-
-    // ... Gardez toutes les fonctions updateSub, triggerSync, etc. ...
-    // Note : Dans triggerSync, utilisez : await window.DatabaseOps.saveData({...data, projects: updatedProjects});
-
-    return (
-        <div className="flex flex-col h-screen overflow-hidden text-slate-800">
-            {/* ... Header identique ... */}
-
-            <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
-                {[
-                    {id: 'details', icon: 'edit', label: 'Lots'}, 
-                    {id: 'planning', icon: 'calendar', label: 'Planning'}, 
-                    {id: 'tracking', icon: 'camera', label: 'Suivi'}, 
-                    {id: 'budget', icon: 'wallet', label: 'Budget'}
-                ].filter(item => userAccess.includes(item.id)).map(item => (
-                    <a key={item.id} href={`gestion.html?id=${projectId}&view=${item.id}`} className={`flex flex-col items-center flex-1 transition-all ${currentView === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
-                        <div className={`p-2 rounded-xl ${currentView === item.id ? 'bg-blue-50' : ''}`}><Icon name={item.icon} size={22}/></div>
-                        <span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
-                    </a>
-                ))}
-            </nav>
-        </div>
-    );
-}
+            const getFileData = (file) => {
+                if (!file) return { url: '', name: 'Sans nom' };
+                if (typeof file === 'object' && file.url) return { url: file.url, name: file.name || 'Fichier' };
+                return { url: file, name: 'Fichier' };
+            };
 
             const downloadFile = (file) => {
                 const { url, name } = getFileData(file);
@@ -160,52 +126,46 @@
                 window.location.href = 'index.html';
             };
 
-            // Initialisation robuste de la session
             useEffect(() => {
-                const checkSession = async () => {
+                const init = async () => {
                     const { data: { session } } = await supabaseClient.auth.getSession();
                     if (session) {
                         setUser(session.user);
                         const initialData = await window.DatabaseOps.fetchInitialData();
-                        setProjects(initialData);
+                        setData(initialData);
                         setIsLoading(false);
                     } else {
-                        // On écoute les changements si pas encore de session
-                        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                            if (session) {
-                                setUser(session.user);
-                                const initialData = await window.DatabaseOps.fetchInitialData();
-                                setProjects(initialData);
-                                setIsLoading(false);
-                            } else if (event === 'SIGNED_OUT') {
-                                window.location.href = 'index.html';
-                            }
-                        });
-                        return () => subscription.unsubscribe();
+                        window.location.href = 'index.html';
                     }
                 };
-                checkSession();
+                init();
             }, []);
 
-            // Abonnement aux données en temps réel
-            useEffect(() => { 
-                if (user) return window.DatabaseOps.subscribeData(setProjects); 
-            }, [user]);
+            useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setData); }, [user]);
 
             const triggerSync = async (updatedProjects) => {
-                setProjects(updatedProjects); setIsSyncing(true);
-                await window.DatabaseOps.saveData(updatedProjects);
+                const newData = { ...data, projects: updatedProjects };
+                setData(newData); 
+                setIsSyncing(true);
+                await window.DatabaseOps.saveData(newData);
                 setTimeout(() => setIsSyncing(false), 800);
             };
 
-            const activeProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
+            const userAccess = useMemo(() => {
+                if (!user) return [];
+                if (user.email === ADMIN_EMAIL) return ['details', 'planning', 'tracking', 'budget'];
+                const member = data.members.find(m => m.email === user.email);
+                return member ? member.access : ['details'];
+            }, [user, data.members]);
 
-            const updateSub = (tId, sId, data) => {
-                let updatedProjects = projects.map(p => p.id === projectId ? {
+            const activeProject = useMemo(() => data.projects.find(p => p.id === projectId), [data.projects, projectId]);
+
+            const updateSub = (tId, sId, subData) => {
+                let updatedProjects = data.projects.map(p => p.id === projectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
                         ...t, subtasks: sId === 'new' ? 
-                            [...t.subtasks, {id: Date.now().toString(), ...data}] : 
-                            t.subtasks.map(s => s.id === sId ? {...s, ...data} : s)
+                            [...t.subtasks, {id: Date.now().toString(), ...subData}] : 
+                            t.subtasks.map(s => s.id === sId ? {...s, ...subData} : s)
                     } : t)
                 } : p);
 
@@ -235,7 +195,7 @@
                 const updatedTasks = [...activeProject.tasks];
                 const [removed] = updatedTasks.splice(from, 1);
                 updatedTasks.splice(to, 0, removed);
-                triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: updatedTasks} : p));
+                triggerSync(data.projects.map(p => p.id === projectId ? {...p, tasks: updatedTasks} : p));
             };
 
             const moveSubtask = (taskId, from, to) => {
@@ -243,7 +203,7 @@
                 const updatedSubs = [...task.subtasks];
                 const [removed] = updatedSubs.splice(from, 1);
                 updatedSubs.splice(to, 0, removed);
-                triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === taskId ? {...t, subtasks: updatedSubs} : t)} : p));
+                triggerSync(data.projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === taskId ? {...t, subtasks: updatedSubs} : t)} : p));
             };
 
             const handleFileUpload = async (e, tId, sId, field) => {
@@ -280,7 +240,7 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Synchronisation...</div>;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Initialisation...</div>;
             if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4"><div className="font-black uppercase text-xs text-slate-400">Projet introuvable</div><a href="index.html" className="px-6 py-2 bg-blue-600 text-white rounded-full font-bold text-xs uppercase">Retour</a></div>;
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
@@ -306,7 +266,7 @@
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
-                        {currentView === 'budget' && (
+                        {currentView === 'budget' && userAccess.includes('budget') && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6">
                                 <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase border-4 border-white/5">
                                     <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Total Prévisionnel HT</p>
@@ -345,22 +305,22 @@
                             </div>
                         )}
 
-                        {currentView === 'details' && (
+                        {currentView === 'details' && userAccess.includes('details') && (
                              <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
                                 <h2 className="text-xl font-black uppercase italic">{activeProject.name}</h2>
                                 {activeProject.tasks.map((task, tIdx) => (
                                     <div key={task.id} 
-                                        draggable onDragStart={() => setDraggedItem({type: 'lot', index: tIdx})}
+                                        draggable={user.email === ADMIN_EMAIL} onDragStart={() => setDraggedItem({type: 'lot', index: tIdx})}
                                         onDragOver={e => e.preventDefault()}
                                         onDrop={() => { if(draggedItem?.type === 'lot') { moveLot(draggedItem.index, tIdx); setDraggedItem(null); } }}
                                         className={`bg-white p-6 rounded-[32px] border shadow-sm transition-all ${draggedItem?.type === 'lot' && draggedItem.index === tIdx ? 'opacity-40 scale-95 border-dashed border-blue-500' : ''}`}>
                                         
                                         <div className="flex justify-between mb-4 items-center">
                                             <div className="flex items-center gap-2">
-                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500"><Icon name="grip" size={18}/></div>
-                                                <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
+                                                {user.email === ADMIN_EMAIL && <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500"><Icon name="grip" size={18}/></div>}
+                                                <h4 className={`font-black uppercase text-blue-600 text-[10px] tracking-widest ${user.email === ADMIN_EMAIL ? 'editable' : ''}`} onClick={() => user.email === ADMIN_EMAIL && setDialog({open: true, title: "Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(data.projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
                                             </div>
-                                            <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
+                                            {user.email === ADMIN_EMAIL && <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(data.projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>}
                                         </div>
 
                                         <div onDragOver={e => e.preventDefault()}>
@@ -368,17 +328,17 @@
                                             const parentTask = sub.dependsOn ? activeProject.tasks.flatMap(t => t.subtasks).find(st => st.id === sub.dependsOn) : null;
                                             return (
                                                 <div key={sub.id} 
-                                                    draggable onDragStart={(e) => { e.stopPropagation(); setDraggedItem({type: 'sub', taskId: task.id, index: sIdx}); }}
+                                                    draggable={user.email === ADMIN_EMAIL} onDragStart={(e) => { e.stopPropagation(); setDraggedItem({type: 'sub', taskId: task.id, index: sIdx}); }}
                                                     onDrop={(e) => { e.stopPropagation(); if(draggedItem?.type === 'sub' && draggedItem.taskId === task.id) { moveSubtask(task.id, draggedItem.index, sIdx); setDraggedItem(null); } }}
                                                     className={`mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 ${draggedItem?.type === 'sub' && draggedItem.index === sIdx && draggedItem.taskId === task.id ? 'opacity-30 border-blue-500' : ''}`}>
-                                                    <div className="flex flex-col justify-center text-slate-300 cursor-grab"><Icon name="grip" size={16}/></div>
+                                                    {user.email === ADMIN_EMAIL && <div className="flex flex-col justify-center text-slate-300 cursor-grab"><Icon name="grip" size={16}/></div>}
                                                     <div className="flex-1">
                                                         <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
                                                             <div className="flex flex-col">
-                                                                <span className="editable" onClick={() => setDialog({open: true, title: "Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
+                                                                <span className={user.email === ADMIN_EMAIL ? "editable" : ""} onClick={() => user.email === ADMIN_EMAIL && setDialog({open: true, title: "Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
                                                                 {parentTask && <span className="text-[7px] text-blue-500 mt-1 italic font-bold">Lien après : {parentTask.title}</span>}
                                                             </div>
-                                                            <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className={sub.dependsOn ? 'text-blue-600' : 'text-slate-300'}><Icon name="link" size={14}/></button>
+                                                            {user.email === ADMIN_EMAIL && <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className={sub.dependsOn ? 'text-blue-600' : 'text-slate-300'}><Icon name="link" size={14}/></button>}
                                                         </div>
                                                         <div className="flex gap-2">
                                                             <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold bg-white border outline-none"/>
@@ -392,14 +352,14 @@
                                             );
                                         })}
                                         </div>
-                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>
+                                        {user.email === ADMIN_EMAIL && <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>}
                                     </div>
                                 ))}
-                                <button onClick={() => setDialog({open: true, title: "Nouveau Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
+                                {user.email === ADMIN_EMAIL && <button onClick={() => setDialog({open: true, title: "Nouveau Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(data.projects.map(p => p.id === projectId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>}
                             </div>
                         )}
 
-                        {currentView === 'tracking' && (
+                        {currentView === 'tracking' && userAccess.includes('tracking') && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
                                 {activeProject.tasks.map(task => task.subtasks.map(sub => (
                                     <div key={sub.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
@@ -425,7 +385,7 @@
                             </div>
                         )}
                         
-                        {currentView === 'planning' && (
+                        {currentView === 'planning' && userAccess.includes('planning') && (
                             <div className="flex flex-col h-full bg-white overflow-hidden">
                                 <div className="p-3 border-b bg-slate-50 flex justify-between">
                                     <div className="flex items-center gap-3">
@@ -493,7 +453,12 @@
                     </main>
 
                     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
-                        {[{id: 'details', icon: 'edit', label: 'Lots'}, {id: 'planning', icon: 'calendar', label: 'Planning'}, {id: 'tracking', icon: 'camera', label: 'Suivi'}, {id: 'budget', icon: 'wallet', label: 'Budget'}].map(item => (
+                        {[
+                            {id: 'details', icon: 'edit', label: 'Lots'}, 
+                            {id: 'planning', icon: 'calendar', label: 'Planning'}, 
+                            {id: 'tracking', icon: 'camera', label: 'Suivi'}, 
+                            {id: 'budget', icon: 'wallet', label: 'Budget'}
+                        ].filter(item => userAccess.includes(item.id)).map(item => (
                             <a key={item.id} href={`gestion.html?id=${projectId}&view=${item.id}`} className={`flex flex-col items-center flex-1 transition-all ${currentView === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
                                 <div className={`p-2 rounded-xl ${currentView === item.id ? 'bg-blue-50' : ''}`}><Icon name={item.icon} size={22}/></div>
                                 <span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
@@ -510,6 +475,21 @@
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {linkDialog.open && (
+                        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
+                                <h3 className="text-lg font-black uppercase italic mb-6 text-center">Lier à une tâche</h3>
+                                <div className="max-h-60 overflow-y-auto space-y-2 mb-6">
+                                    <button onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: null}); setLinkDialog({open: false}); }} className="w-full p-4 bg-slate-100 rounded-2xl font-bold text-xs uppercase text-slate-400">Aucune liaison</button>
+                                    {activeProject.tasks.flatMap(t => t.subtasks).filter(s => s.id !== linkDialog.subId).map(s => (
+                                        <button key={s.id} onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: s.id}); setLinkDialog({open: false}); }} className="w-full p-4 bg-blue-50 text-blue-600 rounded-2xl font-bold text-xs uppercase text-left">{s.title}</button>
+                                    ))}
+                                </div>
+                                <button className="w-full py-4 font-black uppercase text-slate-400" onClick={() => setLinkDialog({open: false})}>Fermer</button>
                             </div>
                         </div>
                     )}
