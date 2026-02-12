@@ -55,13 +55,33 @@
             const [isSyncing, setIsSyncing] = useState(false);
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null });
 
+            // Vérification session existante au chargement
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => { 
-                    if (session) { setUser(session.user); window.DatabaseOps.fetchInitialData().then(setProjects); }
+                    if (session) { 
+                        setUser(session.user); 
+                        window.DatabaseOps.fetchInitialData().then(setProjects); 
+                    }
                 });
             }, []);
 
-            useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
+            // Abonnement temps réel si utilisateur connecté
+            useEffect(() => { 
+                if (user) return window.DatabaseOps.subscribeData(setProjects); 
+            }, [user]);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                const { data, error } = await supabaseClient.auth.signInWithPassword(loginData);
+                if (error) {
+                    alert(error.message);
+                } else {
+                    setUser(data.user);
+                    // Chargement immédiat après connexion réussie
+                    const initialData = await window.DatabaseOps.fetchInitialData();
+                    setProjects(initialData);
+                }
+            };
 
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects);
@@ -72,7 +92,7 @@
 
             if (!user) return (
                 <div className="h-screen flex items-center justify-center bg-slate-900 p-6 text-center">
-                    <form onSubmit={(e) => { e.preventDefault(); supabaseClient.auth.signInWithPassword(loginData).then(({data, error}) => error ? alert(error.message) : setUser(data.user)); }} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6">
+                    <form onSubmit={handleLogin} className="bg-white p-10 rounded-[40px] w-full max-w-md shadow-2xl space-y-6">
                         <h2 className="text-3xl font-black uppercase italic text-slate-800">BTP Manager Pro</h2>
                         <input type="email" placeholder="Email" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold" onChange={e => setLoginData({...loginData, email: e.target.value})}/>
                         <input type="password" placeholder="Pass" className="w-full p-4 bg-slate-100 rounded-2xl outline-none font-bold" onChange={e => setLoginData({...loginData, password: e.target.value})}/>
