@@ -16,66 +16,20 @@
         .custom-scrollbar-h::-webkit-scrollbar { height: 14px !important; display: block !important; }
         .custom-scrollbar-h::-webkit-scrollbar-track { background: #e2e8f0; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 2px solid #e2e8f0; }
-        
         .sticky-col { position: sticky !important; left: 0 !important; z-index: 100 !important; background-color: white !important; }
         .sticky-shadow { box-shadow: 8px 0 15px -5px rgba(0,0,0,0.1); }
-
-        .weekend-cell { 
-            background-color: #f8fafc;
-            background-image: repeating-linear-gradient(45deg, #f1f5f9 0px, #f1f5f9 2px, transparent 2px, transparent 8px);
-        }
-
-        .today-line {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background-color: #ef4444;
-            z-index: 40;
-            pointer-events: none;
-        }
-        .today-badge {
-            position: absolute;
-            top: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #ef4444;
-            color: white;
-            font-size: 7px;
-            font-weight: 900;
-            padding: 2px 4px;
-            border-radius: 4px;
-            white-space: nowrap;
-            text-transform: uppercase;
-        }
-
+        .weekend-cell { background-color: #f8fafc; background-image: repeating-linear-gradient(45deg, #f1f5f9 0px, #f1f5f9 2px, transparent 2px, transparent 8px); }
+        .today-line { position: absolute; top: 0; bottom: 0; width: 2px; background-color: #ef4444; z-index: 40; pointer-events: none; }
+        .today-badge { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: #ef4444; color: white; font-size: 7px; font-weight: 900; padding: 2px 4px; border-radius: 4px; white-space: nowrap; text-transform: uppercase; }
         .photo-stack { position: relative; width: 60px; height: 60px; }
         .photo-stack-img { position: absolute; width: 45px; height: 45px; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-radius: 8px; background: #fff; }
-        
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
         .sync-success { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-        .viewer-nav-btn {
-            position: fixed;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 300;
-            background: rgba(0,0,0,0.3);
-            color: white;
-            padding: 16px;
-            border-radius: 50%;
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        .viewer-nav-btn { position: fixed; top: 50%; transform: translateY(-50%); z-index: 300; background: rgba(0,0,0,0.3); color: white; padding: 16px; border-radius: 50%; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         .viewer-nav-btn:active { background: #2563eb; transform: translateY(-50%) scale(0.9); }
         .viewer-nav-btn:disabled { opacity: 0; pointer-events: none; }
-        
         .editable:hover { color: #2563eb; cursor: pointer; text-decoration: underline; }
     </style>
 </head>
@@ -169,20 +123,31 @@
                 window.location.href = 'index.html';
             };
 
-            // Écouteur de session amélioré
+            // Écouteur de session et chargement forcé des données
             useEffect(() => {
-                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                const init = async () => {
+                    const { data: { session } } = await supabaseClient.auth.getSession();
                     if (session) {
                         setUser(session.user);
                         const data = await window.DatabaseOps.fetchInitialData();
                         setProjects(data);
                         setIsLoading(false);
                     } else {
-                        window.location.href = 'index.html';
+                        // Si pas de session en cache, on écoute le changement
+                        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                            if (session) {
+                                setUser(session.user);
+                                const data = await window.DatabaseOps.fetchInitialData();
+                                setProjects(data);
+                                setIsLoading(false);
+                            } else if (event === 'SIGNED_OUT') {
+                                window.location.href = 'index.html';
+                            }
+                        });
+                        return () => subscription.unsubscribe();
                     }
-                });
-
-                return () => subscription.unsubscribe();
+                };
+                init();
             }, []);
 
             useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
@@ -193,7 +158,7 @@
                 setTimeout(() => setIsSyncing(false), 800);
             };
 
-            const activeProject = projects.find(p => p.id === projectId);
+            const activeProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
 
             const updateSub = (tId, sId, data) => {
                 let updatedProjects = projects.map(p => p.id === projectId ? {
@@ -207,7 +172,9 @@
                 let hasChanged = true;
                 while (hasChanged) {
                     hasChanged = false;
-                    const allSub = updatedProjects.find(p => p.id === projectId).tasks.flatMap(t => t.subtasks);
+                    const proj = updatedProjects.find(p => p.id === projectId);
+                    if(!proj) break;
+                    const allSub = proj.tasks.flatMap(t => t.subtasks);
                     updatedProjects = updatedProjects.map(p => p.id !== projectId ? p : {
                         ...p, tasks: p.tasks.map(t => ({ ...t, subtasks: t.subtasks.map(s => {
                             if (s.dependsOn) {
@@ -249,7 +216,8 @@
             };
 
             const ganttRange = useMemo(() => {
-                const subtasks = activeProject?.tasks?.flatMap(t => t.subtasks) || [];
+                if (!activeProject) return [];
+                const subtasks = activeProject.tasks.flatMap(t => t.subtasks) || [];
                 const dates = subtasks.length > 0 ? subtasks.map(s => new Date(s.date)) : [new Date()];
                 const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 10);
                 const end = new Date(Math.max(...dates)); end.setDate(end.getDate() + 90);
@@ -272,7 +240,8 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (isLoading || !activeProject) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Chargement des données...</div>;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Initialisation...</div>;
+            if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4"><div className="font-black uppercase text-xs text-slate-400">Projet introuvable</div><a href="index.html" className="px-6 py-2 bg-blue-600 text-white rounded-full font-bold text-xs uppercase">Retour</a></div>;
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
 
@@ -444,14 +413,12 @@
                                                 ))}
                                             </div>
                                         </div>
-
                                         <div className="relative">
                                             {todayIdx !== -1 && (
                                                 <div className="today-line" style={{left: (128 + (todayIdx * ganttZoom) + (ganttZoom / 2) - 1) + 'px'}}>
                                                     <div className="today-badge">Aujourd'hui</div>
                                                 </div>
                                             )}
-
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex">
@@ -496,30 +463,13 @@
 
                     {dialog.open && (
                         <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
-                            <div className="bg-white w-full max-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
                                 {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none focus:ring-2 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
                                 </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {linkDialog.open && (
-                        <div className="fixed inset-0 z-[450] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl max-h-[70vh] flex flex-col text-slate-800">
-                                <h3 className="text-lg font-black uppercase italic mb-4 text-center">Lier après :</h3>
-                                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                                    {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
-                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:bg-blue-50 transition-all" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, { dependsOn: other.id }); setLinkDialog({ open: false }); }}>
-                                            <span className="text-[8px] font-black text-blue-600 uppercase block mb-1">{other.lot}</span><span className="font-bold text-xs">{other.title}</span>
-                                        </button>
-                                    ))}
-                                    <button className="w-full p-4 rounded-2xl border border-red-100 text-red-500 text-xs font-black uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, { dependsOn: null }); setLinkDialog({open: false}); }}>Supprimer le lien</button>
-                                </div>
-                                <button className="mt-4 py-4 w-full font-black uppercase text-slate-400" onClick={() => setLinkDialog({open: false})}>Fermer</button>
                             </div>
                         </div>
                     )}
@@ -536,13 +486,7 @@
                                             return (
                                                 <div key={idx} onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="flex flex-col gap-2">
                                                     <div className="aspect-square bg-slate-800 rounded-2xl overflow-hidden border border-white/10 cursor-pointer shadow-lg flex items-center justify-center group relative active:scale-95 transition-all">
-                                                        {url.toLowerCase().endsWith('.pdf') ? (
-                                                            <div className="flex flex-col items-center gap-2">
-                                                                <Icon name="file" size={40} color="#ef4444"/>
-                                                            </div>
-                                                        ) : (
-                                                            <img src={url} className="w-full h-full object-cover"/>
-                                                        )}
+                                                        {url.toLowerCase().endsWith('.pdf') ? <Icon name="file" size={40} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover"/>}
                                                     </div>
                                                     <span className="text-[10px] text-white/60 font-medium text-center truncate px-2">{name}</span>
                                                 </div>
@@ -553,10 +497,8 @@
                             ) : (
                                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                                     <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[350] font-bold text-xs uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
-                                    
                                     <button className="viewer-nav-btn left-6" disabled={viewer.index === 0} onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={32}/></button>
                                     <button className="viewer-nav-btn right-6" disabled={viewer.index === sortedDocs.length - 1} onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={32}/></button>
-
                                     <div className="absolute bottom-10 right-6 flex gap-3 z-[350]">
                                         <button onClick={() => downloadFile(sortedDocs[viewer.index])} className="bg-green-600 text-white p-4 rounded-full shadow-lg"><Icon name="download" size={20}/></button>
                                         <button className="bg-red-600 text-white p-4 rounded-full shadow-lg" onClick={() => {
@@ -571,7 +513,6 @@
                                             });
                                         }}><Icon name="trash" size={20}/></button>
                                     </div>
-
                                     <div className="w-full h-full flex flex-col items-center justify-center p-4">
                                         <div className="text-white/40 text-[10px] uppercase font-black mb-4 tracking-widest">{getFileData(sortedDocs[viewer.index]).name}</div>
                                         <div className="flex-1 w-full max-w-4xl flex items-center justify-center">
