@@ -53,7 +53,7 @@
         };
     </script>
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useCallback } = React;
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
 
@@ -123,34 +123,47 @@
                 window.location.href = 'index.html';
             };
 
-            // Écouteur de session et chargement forcé des données
-            useEffect(() => {
-                const init = async () => {
-                    const { data: { session } } = await supabaseClient.auth.getSession();
-                    if (session) {
-                        setUser(session.user);
-                        const data = await window.DatabaseOps.fetchInitialData();
-                        setProjects(data);
-                        setIsLoading(false);
-                    } else {
-                        // Si pas de session en cache, on écoute le changement
-                        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                            if (session) {
-                                setUser(session.user);
-                                const data = await window.DatabaseOps.fetchInitialData();
-                                setProjects(data);
-                                setIsLoading(false);
-                            } else if (event === 'SIGNED_OUT') {
-                                window.location.href = 'index.html';
-                            }
-                        });
-                        return () => subscription.unsubscribe();
-                    }
-                };
-                init();
+            // Fonction de chargement robuste
+            const loadAppData = useCallback(async (sessionUser) => {
+                setUser(sessionUser);
+                try {
+                    const data = await window.DatabaseOps.fetchInitialData();
+                    setProjects(data || []);
+                } catch (e) {
+                    console.error("Erreur chargement", e);
+                } finally {
+                    setIsLoading(false);
+                }
             }, []);
 
-            useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
+            useEffect(() => {
+                // 1. Vérifier session immédiate
+                supabaseClient.auth.getSession().then(({ data: { session } }) => {
+                    if (session) loadAppData(session.user);
+                    else {
+                        // Si pas de session, on attend 1.5s avant de dire que c'est fini (évite le flash)
+                        setTimeout(() => setIsLoading(prev => prev ? true : false), 1500);
+                    }
+                });
+
+                // 2. Écouter les changements (Connexion/Déconnexion)
+                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
+                    if (session) loadAppData(session.user);
+                    else if (event === 'SIGNED_OUT') window.location.href = 'index.html';
+                });
+
+                return () => subscription.unsubscribe();
+            }, [loadAppData]);
+
+            // Abonnement aux changements temps réel une fois le user chargé
+            useEffect(() => { 
+                if (user) {
+                    const unsubscribe = window.DatabaseOps.subscribeData((newData) => {
+                        setProjects(newData || []);
+                    });
+                    return unsubscribe;
+                }
+            }, [user]);
 
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects); setIsSyncing(true);
@@ -240,8 +253,11 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Initialisation...</div>;
-            if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4"><div className="font-black uppercase text-xs text-slate-400">Projet introuvable</div><a href="index.html" className="px-6 py-2 bg-blue-600 text-white rounded-full font-bold text-xs uppercase">Retour</a></div>;
+            // Affichages d'états
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-[10px] tracking-widest animate-pulse text-slate-400">Synchronisation...</div>;
+            if (!user) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-900 text-white"><div className="font-black uppercase text-xs tracking-widest opacity-50">Session expirée</div><a href="index.html" className="px-8 py-3 bg-blue-600 rounded-2xl font-black text-xs uppercase">Se connecter</a></div>;
+            if (!activeProject && projects.length > 0) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50"><div className="font-black uppercase text-xs text-slate-400 italic">Chargement du projet...</div></div>;
+            if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50"><div className="font-black uppercase text-xs text-slate-400 tracking-widest">Aucun projet trouvé</div><a href="index.html" className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase">Retour</a></div>;
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
 
