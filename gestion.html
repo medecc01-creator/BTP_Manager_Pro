@@ -17,14 +17,22 @@
         .custom-scrollbar-h::-webkit-scrollbar-track { background: #e2e8f0; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 2px solid #e2e8f0; }
         
-        /* Correction Opacité Totale Colonne Gauche */
+        /* OPACITÉ RADICALE POUR LA COLONNE GAUCHE */
         .sticky-col { 
             position: sticky; 
             left: 0; 
-            z-index: 40; 
-            background-color: #ffffff !important; 
-            opacity: 1 !important; 
-            box-shadow: 4px 0 8px -2px rgba(0,0,0,0.1);
+            z-index: 45; /* Plus haut que les barres de planning */
+            background-color: white !important;
+            box-shadow: 4px 0 10px -5px rgba(0,0,0,0.2);
+        }
+
+        /* Bouclier anti-transparence supplémentaire */
+        .sticky-col::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: white;
+            z-index: -1;
         }
 
         .photo-stack { position: relative; width: 60px; height: 60px; }
@@ -380,6 +388,7 @@
                                     <div className="inline-block min-w-full">
                                         <div className="sticky top-0 z-50 bg-slate-800 text-white shadow-md">
                                             <div className="flex border-b border-white/10">
+                                                {/* Colonne d'entête Lot : Z-60 pour être au dessus de tout */}
                                                 <div className="w-32 shrink-0 bg-slate-800 sticky left-0 z-[60] border-r border-white/10"></div>
                                                 {months.map((m, i) => (
                                                     <div key={i} style={{width: (m.count * ganttZoom) + 'px'}} className="shrink-0 text-center py-1 border-r border-white/5 bg-slate-800/50">
@@ -405,7 +414,8 @@
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex bg-blue-50/40">
-                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">
+                                                        {/* Colonne Lot Opaque */}
+                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 border-r">
                                                             {task.title}
                                                         </div>
                                                     </div>
@@ -416,8 +426,8 @@
                                                         
                                                         return (
                                                             <div key={sub.id} className="flex h-8 items-center relative border-t border-slate-50">
-                                                                {/* Colonne gauche 100% Blanche et opaque */}
-                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r truncate flex items-center">
+                                                                {/* Colonne Tâche Opaque */}
+                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 border-r truncate flex items-center">
                                                                     {sub.title}
                                                                 </div>
                                                                 {ganttRange.map((d, i) => (
