@@ -24,7 +24,6 @@
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .editable:hover { background: rgba(37, 99, 235, 0.05); border-radius: 4px; cursor: pointer; }
-        .dragging { opacity: 0.5; border: 2px dashed #2563eb; }
     </style>
 </head>
 <body>
@@ -79,7 +78,6 @@
             const projectId = params.get('id');
             const currentView = params.get('view') || 'details';
             const [ganttZoom, setGanttZoom] = useState(40);
-            // Viewer state modified to support 'grid' mode
             const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null, field: 'photos', mode: 'view' }); 
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
             const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
@@ -102,7 +100,6 @@
 
             const activeProject = projects.find(p => p.id === projectId);
 
-            // Fonction pour récupérer les infos de dépendance
             const getDependencyInfo = (dependsOnId) => {
                 if (!dependsOnId) return null;
                 for (const t of activeProject.tasks) {
@@ -139,7 +136,20 @@
                 triggerSync(updatedProjects);
             };
 
-            // Fonction de réorganisation des tâches (Drag & Drop)
+            // Fonction pour réorganiser les LOTS
+            const moveLot = (fromIndex, toIndex) => {
+                if (fromIndex === toIndex) return;
+                const updatedProjects = projects.map(p => {
+                    if (p.id !== projectId) return p;
+                    const newTasks = [...p.tasks];
+                    const [moved] = newTasks.splice(fromIndex, 1);
+                    newTasks.splice(toIndex, 0, moved);
+                    return { ...p, tasks: newTasks };
+                });
+                triggerSync(updatedProjects);
+            };
+
+            // Fonction pour réorganiser les TACHES
             const moveSubtask = (taskId, fromIndex, toIndex) => {
                 if (fromIndex === toIndex) return;
                 const updatedProjects = projects.map(p => {
@@ -179,7 +189,6 @@
                 return result;
             }, [activeProject]);
 
-            // Calcul des mois pour le planning
             const months = useMemo(() => {
                 const ms = [];
                 let currentMonth = "";
@@ -198,7 +207,6 @@
                 return ms;
             }, [ganttRange]);
 
-            // Position de la ligne "Aujourd'hui"
             const todayIndex = useMemo(() => {
                 const today = new Date().toDateString();
                 return ganttRange.findIndex(d => d.toDateString() === today);
@@ -265,26 +273,50 @@
                         {currentView === 'details' && (
                              <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
                                 <h2 className="text-xl font-black uppercase italic editable" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
-                                {activeProject.tasks.map((task) => (
-                                    <div key={task.id} className="bg-white p-6 rounded-[32px] border shadow-sm transition-all hover:shadow-md">
+                                {activeProject.tasks.map((task, taskIdx) => (
+                                    <div key={task.id} 
+                                        draggable
+                                        onDragStart={(e) => {
+                                            if (e.target.closest('.editable') || e.target.closest('button') || e.target.closest('input')) return;
+                                            setDraggedItem({type: 'lot', index: taskIdx});
+                                        }}
+                                        onDragOver={e => e.preventDefault()}
+                                        onDrop={() => {
+                                            if(draggedItem && draggedItem.type === 'lot') {
+                                                moveLot(draggedItem.index, taskIdx);
+                                                setDraggedItem(null);
+                                            }
+                                        }}
+                                        className={`bg-white p-6 rounded-[32px] border shadow-sm transition-all hover:shadow-md ${draggedItem?.type === 'lot' && draggedItem.index === taskIdx ? 'opacity-40 border-dashed border-blue-500 scale-95' : ''}`}>
+                                        
                                         <div className="flex justify-between mb-4 items-center">
-                                            <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Nom du Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500 transition-colors">
+                                                    <Icon name="grip" size={18}/>
+                                                </div>
+                                                <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Nom du Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
+                                            </div>
                                             <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
                                         </div>
+
                                         <div onDragOver={e => e.preventDefault()}>
                                         {task.subtasks.map((sub, index) => {
                                             const depInfo = getDependencyInfo(sub.dependsOn);
                                             return (
                                             <div key={sub.id} 
                                                 draggable
-                                                onDragStart={() => setDraggedItem({taskId: task.id, index})}
-                                                onDrop={() => {
-                                                    if(draggedItem && draggedItem.taskId === task.id) {
+                                                onDragStart={(e) => {
+                                                    e.stopPropagation();
+                                                    setDraggedItem({type: 'sub', taskId: task.id, index});
+                                                }}
+                                                onDrop={(e) => {
+                                                    e.stopPropagation();
+                                                    if(draggedItem && draggedItem.type === 'sub' && draggedItem.taskId === task.id) {
                                                         moveSubtask(task.id, draggedItem.index, index);
                                                         setDraggedItem(null);
                                                     }
                                                 }}
-                                                className="mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 group active:cursor-grabbing cursor-grab hover:border-blue-300 transition-colors">
+                                                className={`mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 group active:cursor-grabbing cursor-grab hover:border-blue-300 transition-colors ${draggedItem?.type === 'sub' && draggedItem.index === index && draggedItem.taskId === task.id ? 'opacity-30 border-blue-500 border-dashed' : ''}`}>
                                                 <div className="flex flex-col justify-center text-slate-300 group-hover:text-blue-400"><Icon name="grip" size={16}/></div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
@@ -354,7 +386,6 @@
                                 <div className="flex-1 custom-scrollbar-h relative">
                                     <div className="inline-block min-w-full">
                                         <div className="sticky top-0 z-40 bg-slate-800 text-white shadow-md">
-                                            {/* Ligne des Mois */}
                                             <div className="flex border-b border-white/10">
                                                 <div className="w-32 shrink-0 bg-slate-800 sticky left-0 z-50 border-r border-white/10"></div>
                                                 {months.map((m, i) => (
@@ -363,7 +394,6 @@
                                                     </div>
                                                 ))}
                                             </div>
-                                            {/* Ligne des Jours */}
                                             <div className="flex">
                                                 <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic flex items-center justify-center">PLANNING</div>
                                                 {ganttRange.map((d, i) => (
@@ -374,9 +404,7 @@
                                             </div>
                                         </div>
 
-                                        {/* Conteneur pour la grille et la ligne rouge */}
                                         <div className="relative">
-                                            {/* Ligne Verticale "Aujourd'hui" */}
                                             {todayIndex !== -1 && (
                                                 <div 
                                                     style={{left: (128 + todayIndex * ganttZoom + (ganttZoom/2)) + 'px'}} 
@@ -461,10 +489,7 @@
 
                     {viewer.open && (
                         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center">
-                            {/* Contrôles génériques */}
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full z-[110]" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
-
-                            {/* MODE GRILLE */}
                             {viewer.mode === 'grid' && (
                                 <div className="w-full h-full p-6 overflow-y-auto">
                                     <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10">Galerie</h3>
@@ -480,20 +505,15 @@
                                     </div>
                                 </div>
                             )}
-
-                            {/* MODE LECTEUR PLEIN ÉCRAN */}
                             {viewer.mode === 'view' && (
                                 <>
                                     <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
-                                    
                                     <button className="absolute bottom-10 left-6 text-white bg-red-600/80 p-4 rounded-full z-[110]" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
                                         const list = [...viewer.photos]; list.splice(viewer.index, 1);
                                         updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
                                         if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
                                     }})}><Icon name="trash" size={20}/></button>
-                                    
                                     {viewer.index > 0 && <button className="absolute left-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
-                                    
                                     <div className="w-full h-full flex items-center justify-center p-4">
                                         {viewer.photos[viewer.index]?.endsWith('.pdf') ? (
                                             <iframe src={viewer.photos[viewer.index]} className="w-full h-full max-w-3xl border-none bg-white rounded-lg"></iframe>
@@ -501,7 +521,6 @@
                                             <img src={viewer.photos[viewer.index]} className="max-w-full max-h-full object-contain" />
                                         )}
                                     </div>
-                                    
                                     {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
                                 </>
                             )}
