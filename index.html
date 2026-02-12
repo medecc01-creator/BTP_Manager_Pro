@@ -24,7 +24,6 @@
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .editable:hover { background: rgba(37, 99, 235, 0.05); border-radius: 4px; cursor: pointer; }
-        .dragging { opacity: 0.5; border: 2px dashed #2563eb; }
     </style>
 </head>
 <body>
@@ -74,12 +73,12 @@
         function App() {
             const [user, setUser] = useState(null);
             const [projects, setProjects] = useState([]);
+            const [loading, setLoading] = useState(true);
             const [isSyncing, setIsSyncing] = useState(false);
             const params = new URLSearchParams(window.location.search);
             const projectId = params.get('id');
             const currentView = params.get('view') || 'details';
             const [ganttZoom, setGanttZoom] = useState(40);
-            // Viewer state modified to support 'grid' mode
             const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null, field: 'photos', mode: 'view' }); 
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
             const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
@@ -87,7 +86,12 @@
 
             useEffect(() => {
                 supabaseClient.auth.getSession().then(({ data: { session } }) => { 
-                    if (session) { setUser(session.user); window.DatabaseOps.fetchInitialData().then(setProjects); } else { window.location.href = 'index.html'; }
+                    if (session) { 
+                        setUser(session.user); 
+                        window.DatabaseOps.fetchInitialData().then(p => { setProjects(p); setLoading(false); }); 
+                    } else { 
+                        window.location.href = 'index.html'; 
+                    }
                 });
             }, []);
 
@@ -96,15 +100,16 @@
             const triggerSync = async (updatedProjects) => {
                 setProjects(updatedProjects);
                 setIsSyncing(true);
-                await window.DatabaseOps.saveData(updatedProjects);
+                try {
+                    await window.DatabaseOps.saveData(updatedProjects);
+                } catch(e) { console.error(e); }
                 setTimeout(() => setIsSyncing(false), 800);
             };
 
-            const activeProject = projects.find(p => p.id === projectId);
+            const activeProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
 
-            // Fonction pour récupérer les infos de dépendance
             const getDependencyInfo = (dependsOnId) => {
-                if (!dependsOnId) return null;
+                if (!dependsOnId || !activeProject) return null;
                 for (const t of activeProject.tasks) {
                     const s = t.subtasks.find(sub => sub.id === dependsOnId);
                     if (s) return { lot: t.title, task: s.title };
@@ -120,15 +125,18 @@
                 } : p);
 
                 if(sId !== 'new') {
+                    // Recalcul des dates en cascade
                     updatedProjects = updatedProjects.map(p => p.id === projectId ? {
                         ...p, tasks: p.tasks.map(t => ({
                             ...t, subtasks: t.subtasks.map(s => {
                                 if(s.dependsOn === sId) {
                                     const parent = p.tasks.flatMap(ts => ts.subtasks).find(ts => ts.id === sId);
-                                    if(parent) {
+                                    if(parent && parent.date) {
                                         const d = new Date(parent.date); 
-                                        d.setDate(d.getDate() + (parseInt(parent.duration) || 0));
-                                        return { ...s, date: d.toISOString().split('T')[0] };
+                                        if(!isNaN(d.getTime())) {
+                                            d.setDate(d.getDate() + (parseInt(parent.duration) || 0));
+                                            return { ...s, date: d.toISOString().split('T')[0] };
+                                        }
                                     }
                                 }
                                 return s;
@@ -139,7 +147,6 @@
                 triggerSync(updatedProjects);
             };
 
-            // Fonction de réorganisation des tâches (Drag & Drop)
             const moveSubtask = (taskId, fromIndex, toIndex) => {
                 if (fromIndex === toIndex) return;
                 const updatedProjects = projects.map(p => {
@@ -169,17 +176,34 @@
                 updateSub(tId, sId, { [field]: [...currentFiles, json.secure_url] });
             };
 
+            // Calcul sécurisé des dates du planning
             const ganttRange = useMemo(() => {
-                const subtasks = activeProject?.tasks?.flatMap(t => t.subtasks) || [];
-                const dates = subtasks.length > 0 ? subtasks.map(s => new Date(s.date)) : [new Date()];
-                const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 15);
-                const end = new Date(Math.max(...dates)); end.setDate(end.getDate() + 90);
+                if (!activeProject) return [new Date()];
+                const subtasks = activeProject.tasks.flatMap(t => t.subtasks).filter(s => s.date);
+                
+                // Filtre les dates invalides ou extrêmes (années 2000 à 2050 seulement)
+                const validDates = subtasks.map(s => new Date(s.date)).filter(d => !isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2050);
+                
+                let start = validDates.length > 0 ? new Date(Math.min(...validDates)) : new Date();
+                let end = validDates.length > 0 ? new Date(Math.max(...validDates)) : new Date();
+                
+                // Marges de sécurité
+                start.setDate(start.getDate() - 7);
+                end.setDate(end.getDate() + 45); // Limité à 45 jours après la fin pour éviter les boucles infinies
+
+                // Sécurité ultime : si l'écart est trop grand (> 1 an), on tronque
+                if((end - start) > 31536000000) {
+                    end = new Date(start);
+                    end.setDate(end.getDate() + 60);
+                }
+
                 const result = [];
-                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) result.push(new Date(d));
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    result.push(new Date(d));
+                }
                 return result;
             }, [activeProject]);
 
-            // Calcul des mois pour le planning
             const months = useMemo(() => {
                 const ms = [];
                 let currentMonth = "";
@@ -198,13 +222,13 @@
                 return ms;
             }, [ganttRange]);
 
-            // Position de la ligne "Aujourd'hui"
             const todayIndex = useMemo(() => {
-                const today = new Date().toDateString();
-                return ganttRange.findIndex(d => d.toDateString() === today);
+                const todayStr = new Date().toDateString();
+                return ganttRange.findIndex(d => d.toDateString() === todayStr);
             }, [ganttRange]);
 
-            if (!user || !activeProject) return null;
+            if (loading) return <div className="flex h-screen items-center justify-center text-blue-600 font-black animate-pulse">CHARGEMENT...</div>;
+            if (!user || !activeProject) return <div className="flex h-screen items-center justify-center text-slate-400 font-bold">Projet introuvable</div>;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-800">
@@ -461,10 +485,8 @@
 
                     {viewer.open && (
                         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center">
-                            {/* Contrôles génériques */}
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full z-[110]" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
 
-                            {/* MODE GRILLE */}
                             {viewer.mode === 'grid' && (
                                 <div className="w-full h-full p-6 overflow-y-auto">
                                     <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10">Galerie</h3>
@@ -481,7 +503,6 @@
                                 </div>
                             )}
 
-                            {/* MODE LECTEUR PLEIN ÉCRAN */}
                             {viewer.mode === 'view' && (
                                 <>
                                     <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
