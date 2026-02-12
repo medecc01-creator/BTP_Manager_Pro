@@ -79,23 +79,31 @@
             const projectId = params.get('id');
             const currentView = params.get('view') || 'details';
             const [ganttZoom, setGanttZoom] = useState(40);
-            const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null, field: 'photos', mode: 'grid' }); 
+            const [viewer, setViewer] = useState({ photos: [], index: 0, open: false, taskId: null, subId: null, field: 'photos', mode: 'view' }); 
             const [dialog, setDialog] = useState({ open: false, title: '', value: '', onConfirm: null, type: 'input' });
             const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
             const [draggedItem, setDraggedItem] = useState(null);
 
+            // Aide pour extraire URL et Nom de manière hybride
             const getFileData = (file) => {
                 if (!file) return { url: '', name: 'Fichier' };
-                if (typeof file === 'object' && file.url) return { url: file.url, name: file.name || 'Fichier' };
+                if (typeof file === 'object' && file.url) {
+                    return { url: file.url, name: file.name || 'Fichier' };
+                }
                 return { url: file, name: 'Fichier' };
             };
 
-            // SOLUTION TELECHARGEMENT : On utilise l'URL Cloudinary directe sans fetch pour éviter le CORS
+            // Fonction pour forcer le téléchargement via Cloudinary
             const downloadFile = (file) => {
-                const { url } = getFileData(file);
-                // On remplace le protocole pour être sûr et on ajoute fl_attachment
+                const { url, name } = getFileData(file);
+                // On remplace /upload/ par /upload/fl_attachment/ pour forcer le téléchargement
                 const downloadUrl = url.replace('/upload/', '/upload/fl_attachment/');
-                window.location.href = downloadUrl;
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.setAttribute('download', name);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             };
 
             useEffect(() => {
@@ -115,12 +123,69 @@
 
             const activeProject = projects.find(p => p.id === projectId);
 
+            const getDependencyInfo = (dependsOnId) => {
+                if (!dependsOnId || !activeProject) return null;
+                for (const t of activeProject.tasks) {
+                    const s = t.subtasks.find(sub => sub.id === dependsOnId);
+                    if (s) return { lot: t.title, task: s.title };
+                }
+                return null;
+            };
+
             const updateSub = (tId, sId, data) => {
                 let updatedProjects = projects.map(p => p.id === projectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
                         ...t, subtasks: sId === 'new' ? [...t.subtasks, {id: Date.now().toString(), ...data}] : t.subtasks.map(s => s.id === sId ? {...s, ...data} : s)
                     } : t)
                 } : p);
+
+                if(sId !== 'new') {
+                    updatedProjects = updatedProjects.map(p => p.id === projectId ? {
+                        ...p, tasks: p.tasks.map(t => ({
+                            ...t, subtasks: t.subtasks.map(s => {
+                                if(s.dependsOn === sId) {
+                                    const parent = p.tasks.flatMap(ts => ts.subtasks).find(ts => ts.id === sId);
+                                    if(parent) {
+                                        const d = new Date(parent.date); 
+                                        d.setDate(d.getDate() + (parseInt(parent.duration) || 0));
+                                        return { ...s, date: d.toISOString().split('T')[0] };
+                                    }
+                                }
+                                return s;
+                            })
+                        }))
+                    } : p);
+                }
+                triggerSync(updatedProjects);
+            };
+
+            const moveLot = (fromIndex, toIndex) => {
+                if (fromIndex === toIndex) return;
+                const updatedProjects = projects.map(p => {
+                    if (p.id !== projectId) return p;
+                    const newTasks = [...p.tasks];
+                    const [moved] = newTasks.splice(fromIndex, 1);
+                    newTasks.splice(toIndex, 0, moved);
+                    return { ...p, tasks: newTasks };
+                });
+                triggerSync(updatedProjects);
+            };
+
+            const moveSubtask = (taskId, fromIndex, toIndex) => {
+                if (fromIndex === toIndex) return;
+                const updatedProjects = projects.map(p => {
+                    if (p.id !== projectId) return p;
+                    return {
+                        ...p,
+                        tasks: p.tasks.map(t => {
+                            if (t.id !== taskId) return t;
+                            const newSubtasks = [...t.subtasks];
+                            const [moved] = newSubtasks.splice(fromIndex, 1);
+                            newSubtasks.splice(toIndex, 0, moved);
+                            return { ...t, subtasks: newSubtasks };
+                        })
+                    };
+                });
                 triggerSync(updatedProjects);
             };
 
@@ -131,12 +196,10 @@
                 const fd = new FormData();
                 fd.append('file', file);
                 fd.append('upload_preset', UPLOAD_PRESET);
-                try {
-                    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
-                    const json = await res.json();
-                    const currentFiles = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId)[field] || [];
-                    updateSub(tId, sId, { [field]: [...currentFiles, { url: json.secure_url, name: originalName }] });
-                } catch(err) { alert("Erreur d'upload"); }
+                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
+                const json = await res.json();
+                const currentFiles = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId)[field] || [];
+                updateSub(tId, sId, { [field]: [...currentFiles, { url: json.secure_url, name: originalName }] });
             };
 
             const ganttRange = useMemo(() => {
@@ -159,13 +222,18 @@
                         if (currentMonth) ms.push({ name: currentMonth, count });
                         currentMonth = mName;
                         count = 1;
-                    } else { count++; }
+                    } else {
+                        count++;
+                    }
                 });
                 if (currentMonth) ms.push({ name: currentMonth, count });
                 return ms;
             }, [ganttRange]);
 
-            const todayIndex = ganttRange.findIndex(d => d.toDateString() === new Date().toDateString());
+            const todayIndex = useMemo(() => {
+                const today = new Date().toDateString();
+                return ganttRange.findIndex(d => d.toDateString() === today);
+            }, [ganttRange]);
 
             if (!user || !activeProject) return <div className="h-screen w-screen flex items-center justify-center font-black uppercase text-xs animate-pulse text-slate-400">Chargement...</div>;
 
@@ -179,15 +247,17 @@
                                 <span className="text-[8px] font-black uppercase opacity-50 italic">{isSyncing ? 'Synchronisation...' : activeProject.name}</span>
                             </div>
                         </div>
-                        <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white"><Icon name="home" size={18}/></a>
+                        <div className="flex gap-2">
+                            <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white"><Icon name="home" size={18}/></a>
+                        </div>
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
                         {currentView === 'budget' && (
                             <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
-                                <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl border-4 border-white/5">
-                                    <p className="text-[10px] opacity-40 mb-2 font-bold uppercase tracking-widest">Total Prévisionnel HT</p>
-                                    <p className="text-4xl font-black italic">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + (parseFloat(sub.cost) || 0), 0), 0).toLocaleString()} €</p>
+                                <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase border-4 border-white/5">
+                                    <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Total Prévisionnel HT</p>
+                                    <p className="text-4xl">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + (parseFloat(sub.cost) || 0), 0), 0).toLocaleString()} €</p>
                                 </div>
                                 {activeProject.tasks.map(task => (
                                     <div key={task.id} className="bg-white p-6 rounded-[24px] border shadow-sm">
@@ -207,7 +277,7 @@
                                                             const { url } = getFileData(file);
                                                             return (
                                                                 <div key={i} className="photo-stack-img flex items-center justify-center bg-white" style={{transform: `rotate(${i*8 - 4}deg)`, left: i*5+'px'}}>
-                                                                    {url.toLowerCase().includes('.pdf') ? <Icon name="file" size={20} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover rounded-lg"/>}
+                                                                    {url.toLowerCase().endsWith('.pdf') ? <Icon name="file" size={20} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover rounded-lg"/>}
                                                                 </div>
                                                             );
                                                         })}
@@ -215,7 +285,7 @@
                                                     </div>
                                                     <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all">
                                                         <Icon name="camera" size={14} color="#2563eb"/>
-                                                        <span className="text-[9px] font-black uppercase text-blue-600">Ajouter Facture</span>
+                                                        <span className="text-[9px] font-black uppercase text-blue-600">Facture / Ticket</span>
                                                         <input type="file" className="hidden" accept="image/*,application/pdf" onChange={e => handleFileUpload(e, task.id, sub.id, 'invoices')}/>
                                                     </label>
                                                 </div>
@@ -228,29 +298,76 @@
 
                         {currentView === 'details' && (
                              <div className="p-6 max-w-2xl mx-auto space-y-6 pb-40">
-                                <h2 className="text-xl font-black uppercase italic" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
-                                {activeProject.tasks.map((task) => (
-                                    <div key={task.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
+                                <h2 className="text-xl font-black uppercase italic editable" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
+                                {activeProject.tasks.map((task, taskIdx) => (
+                                    <div key={task.id} 
+                                        draggable
+                                        onDragStart={(e) => {
+                                            if (e.target.closest('.editable') || e.target.closest('button') || e.target.closest('input')) return;
+                                            setDraggedItem({type: 'lot', index: taskIdx});
+                                        }}
+                                        onDragOver={e => e.preventDefault()}
+                                        onDrop={() => {
+                                            if(draggedItem && draggedItem.type === 'lot') {
+                                                moveLot(draggedItem.index, taskIdx);
+                                                setDraggedItem(null);
+                                            }
+                                        }}
+                                        className={`bg-white p-6 rounded-[32px] border shadow-sm transition-all hover:shadow-md ${draggedItem?.type === 'lot' && draggedItem.index === taskIdx ? 'opacity-40 border-dashed border-blue-500 scale-95' : ''}`}>
+                                        
                                         <div className="flex justify-between mb-4 items-center">
-                                            <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest">{task.title}</h4>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500 transition-colors">
+                                                    <Icon name="grip" size={18}/>
+                                                </div>
+                                                <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Nom du Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
+                                            </div>
                                             <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
                                         </div>
-                                        {task.subtasks.map((sub) => (
-                                            <div key={sub.id} className="mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                                <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
-                                                    <span>{sub.title}</span>
-                                                    <button onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => updateSub(task.id, sub.id, {deleted: true})})} className="text-slate-300"><Icon name="x" size={12}/></button>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold bg-white outline-none"/>
-                                                    <input type="number" value={sub.duration} onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-xs font-bold text-center bg-white outline-none" placeholder="jrs"/>
+
+                                        <div onDragOver={e => e.preventDefault()}>
+                                        {task.subtasks.map((sub, index) => {
+                                            const depInfo = getDependencyInfo(sub.dependsOn);
+                                            return (
+                                            <div key={sub.id} 
+                                                draggable
+                                                onDragStart={(e) => {
+                                                    e.stopPropagation();
+                                                    setDraggedItem({type: 'sub', taskId: task.id, index});
+                                                }}
+                                                onDrop={(e) => {
+                                                    e.stopPropagation();
+                                                    if(draggedItem && draggedItem.type === 'sub' && draggedItem.taskId === task.id) {
+                                                        moveSubtask(task.id, draggedItem.index, index);
+                                                        setDraggedItem(null);
+                                                    }
+                                                }}
+                                                className={`mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 group active:cursor-grabbing cursor-grab hover:border-blue-300 transition-colors ${draggedItem?.type === 'sub' && draggedItem.index === index && draggedItem.taskId === task.id ? 'opacity-30 border-blue-500 border-dashed' : ''}`}>
+                                                <div className="flex flex-col justify-center text-slate-300 group-hover:text-blue-400"><Icon name="grip" size={16}/></div>
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
+                                                        <div className="flex flex-col">
+                                                            <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
+                                                            {depInfo && (
+                                                                <span className="text-[8px] normal-case text-blue-500 mt-1 flex items-center gap-1">
+                                                                    <Icon name="link" size={10} /> Lier à : {depInfo.lot} - {depInfo.task}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className={`transition-colors ${sub.dependsOn ? 'text-blue-600' : 'text-slate-300 hover:text-blue-500'}`}><Icon name="link" size={14}/></button>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold bg-white outline-none"/>
+                                                        <input type="number" value={sub.duration} onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-xs font-bold text-center bg-white outline-none"/>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        ))}
-                                        <button onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-3 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200">+ Tâche</button>
+                                        )})}
+                                        </div>
+                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>
                                     </div>
                                 ))}
-                                <button onClick={() => setDialog({open: true, title: "Nouveau Lot", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
+                                <button onClick={() => setDialog({open: true, title: "Nouveau Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
                             </div>
                         )}
 
@@ -286,10 +403,13 @@
                         {currentView === 'planning' && (
                             <div className="flex flex-col h-full bg-white overflow-hidden">
                                 <div className="p-3 border-b flex justify-between items-center bg-slate-50 shrink-0">
-                                    <input type="range" min="10" max="100" value={ganttZoom} onChange={e => setGanttZoom(parseInt(e.target.value))} className="w-24 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[8px] font-black opacity-40 uppercase tracking-tighter">Zoom</span>
+                                        <input type="range" min="10" max="100" value={ganttZoom} onChange={e => setGanttZoom(parseInt(e.target.value))} className="w-24 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
+                                    </div>
                                     <div className="flex items-center gap-1.5 px-3 py-1 bg-white rounded-full border border-slate-200 shadow-sm">
                                         <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                                        <span className="text-[9px] font-black text-slate-500 uppercase italic">Aujourd'hui</span>
+                                        <span className="text-[9px] font-black text-slate-500 uppercase">Aujourd'hui</span>
                                     </div>
                                 </div>
                                 <div className="flex-1 custom-scrollbar-h relative">
@@ -312,10 +432,15 @@
                                                 ))}
                                             </div>
                                         </div>
+
                                         <div className="relative">
                                             {todayIndex !== -1 && (
-                                                <div style={{left: (128 + todayIndex * ganttZoom + (ganttZoom/2)) + 'px'}} className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+                                                <div 
+                                                    style={{left: (128 + todayIndex * ganttZoom + (ganttZoom/2)) + 'px'}} 
+                                                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                                                ></div>
                                             )}
+
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
@@ -326,10 +451,13 @@
                                                                 <div className="w-32 shrink-0 px-3 text-[8px] font-bold text-slate-500 sticky-col left-0 z-30 border-r bg-white truncate">{sub.title}</div>
                                                                 {ganttRange.map((_, i) => <div key={i} style={{width: ganttZoom+'px'}} className="h-full shrink-0 border-r border-slate-50"></div>)}
                                                                 {startIdx !== -1 && (
-                                                                    <div className="absolute h-5 bg-blue-600 rounded shadow-sm z-20 flex items-center justify-center overflow-hidden border border-blue-400" 
+                                                                    <div className="absolute h-5 bg-blue-600 rounded shadow-sm z-20 flex items-center justify-center overflow-hidden border border-blue-400 group cursor-help" 
                                                                         style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, sub.duration) * ganttZoom)+'px'}}>
                                                                         <div className="h-full bg-green-500 absolute left-0 top-0 transition-all" style={{width: (sub.progress || 0)+'%'}}></div>
                                                                         <span className="relative z-20 text-[7px] font-black text-white">{sub.progress || 0}%</span>
+                                                                        <div className="absolute -top-8 left-0 bg-slate-900 text-white p-2 rounded text-[8px] hidden group-hover:block whitespace-nowrap z-50">
+                                                                            {sub.title} ({sub.duration}j)
+                                                                        </div>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -360,8 +488,30 @@
                                 {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
-                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-lg" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
+                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-lg" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {linkDialog.open && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl max-h-[70vh] flex flex-col">
+                                <h3 className="text-lg font-black uppercase italic mb-4 text-center">Lier après :</h3>
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                    {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
+                                        <button key={other.id} className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:bg-blue-50 transition-all" onClick={() => {
+                                            const d = new Date(other.date); d.setDate(d.getDate() + (parseInt(other.duration) || 0));
+                                            updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0], dependsOn: other.id });
+                                            setLinkDialog({ open: false });
+                                        }}>
+                                            <span className="text-[8px] font-black text-blue-600 uppercase block mb-1">{other.lot}</span>
+                                            <span className="font-bold text-xs">{other.title}</span>
+                                        </button>
+                                    ))}
+                                    <button className="w-full p-4 rounded-2xl border border-red-100 text-red-500 text-xs font-black uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, { dependsOn: null }); setLinkDialog({open: false}); }}>Supprimer le lien</button>
+                                </div>
+                                <button className="mt-4 py-4 w-full font-black uppercase text-slate-400" onClick={() => setLinkDialog({open: false})}>Fermer</button>
                             </div>
                         </div>
                     )}
@@ -371,17 +521,20 @@
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full z-[110]" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
                             {viewer.mode === 'grid' && (
                                 <div className="w-full h-full p-6 overflow-y-auto">
-                                    <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10 italic">Galerie Documents</h3>
-                                    <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                                    <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10">Galerie</h3>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 max-w-2xl mx-auto">
                                         {(viewer.photos || []).map((file, idx) => {
                                             const { url, name } = getFileData(file);
-                                            const isPdf = url.toLowerCase().includes('.pdf');
+                                            const isPdf = url.toLowerCase().endsWith('.pdf');
                                             return (
                                                 <div key={idx} className="flex flex-col gap-2">
-                                                    <div onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="aspect-square bg-slate-900 rounded-2xl flex items-center justify-center border border-white/10 relative overflow-hidden">
-                                                        {isPdf ? <Icon name="file" size={40} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover"/>}
+                                                    <div onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/10 relative cursor-pointer active:scale-95 transition-transform">
+                                                        {isPdf ? 
+                                                            <div className="w-full h-full flex items-center justify-center text-red-400"><Icon name="file" size={40}/></div> 
+                                                            : <img src={url} className="w-full h-full object-cover"/>
+                                                        }
                                                     </div>
-                                                    <span className="text-white text-[8px] truncate text-center opacity-50 uppercase font-black">{name}</span>
+                                                    <span className="text-white text-[9px] truncate text-center px-1 opacity-60 font-bold">{name}</span>
                                                 </div>
                                             );
                                         })}
@@ -390,30 +543,41 @@
                             )}
                             {viewer.mode === 'view' && (
                                 <>
-                                    <button className="absolute top-6 left-6 text-white bg-blue-600 px-4 py-2 rounded-xl z-[110] font-black text-[10px] uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Retour</button>
-                                    <div className="absolute bottom-10 flex gap-6 z-[110]">
-                                        <button onClick={() => downloadFile(viewer.photos[viewer.index])} className="bg-green-600 text-white p-5 rounded-full shadow-2xl active:scale-90 transition-transform"><Icon name="download" size={24}/></button>
-                                        <button className="text-white bg-red-600/80 p-5 rounded-full" onClick={() => {
-                                            const list = [...viewer.photos]; list.splice(viewer.index, 1);
-                                            updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
-                                            if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0, mode: 'grid'});
-                                        }}><Icon name="trash" size={24}/></button>
-                                    </div>
-                                    <div className="w-full h-full flex items-center justify-center p-4">
-                                        {(() => {
-                                            const { url } = getFileData(viewer.photos[viewer.index]);
-                                            if (url.toLowerCase().includes('.pdf')) {
-                                                return (
-                                                    <div className="text-center">
-                                                        <Icon name="file" size={80} color="#ef4444"/>
-                                                        <p className="text-white font-black mt-4 uppercase text-xs italic">Aperçu PDF non disponible sur mobile</p>
-                                                        <button onClick={() => window.open(url, '_blank')} className="mt-6 px-6 py-3 bg-white text-slate-900 rounded-xl font-black text-xs uppercase italic">Ouvrir le PDF</button>
-                                                    </div>
-                                                );
-                                            }
-                                            return <img src={url} className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl" />;
-                                        })()}
-                                    </div>
+                                    {(() => {
+                                        const currentFile = viewer.photos[viewer.index];
+                                        const { url, name } = getFileData(currentFile);
+                                        const isPdf = url.toLowerCase().endsWith('.pdf');
+                                        return (
+                                            <>
+                                                <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
+                                                
+                                                <div className="absolute bottom-10 right-6 flex gap-3 z-[110]">
+                                                    {/* BOUTON TELECHARGER AMELIORE */}
+                                                    <button onClick={() => downloadFile(currentFile)} className="bg-green-600 text-white p-4 rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform">
+                                                        <Icon name="download" size={20}/>
+                                                    </button>
+                                                    
+                                                    <button className="text-white bg-red-600/80 p-4 rounded-full" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
+                                                        const list = [...viewer.photos]; list.splice(viewer.index, 1);
+                                                        updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
+                                                        if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
+                                                    }})}><Icon name="trash" size={20}/></button>
+                                                </div>
+
+                                                {viewer.index > 0 && <button className="absolute left-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
+                                                
+                                                <div className="w-full h-full flex items-center justify-center p-4">
+                                                    {isPdf ? (
+                                                        <iframe src={url} className="w-full h-full max-w-3xl border-none bg-white rounded-lg"></iframe>
+                                                    ) : (
+                                                        <img src={url} className="max-w-full max-h-full object-contain" />
+                                                    )}
+                                                </div>
+
+                                                {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
+                                            </>
+                                        );
+                                    })()}
                                 </>
                             )}
                         </div>
