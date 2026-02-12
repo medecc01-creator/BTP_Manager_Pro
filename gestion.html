@@ -129,7 +129,8 @@
                 x: <path d="M18 6 6 18M6 6l12 12" />,
                 file: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>,
                 grip: <path d="M12 5v.01M12 12v.01M12 19v.01M6 5v.01M6 12v.01M6 19v.01M18 5v.01M18 12v.01M18 19v.01" />,
-                download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>
+                download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+                logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
             };
             return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">{icons[name] || null}</svg>;
         };
@@ -160,6 +161,11 @@
                 const downloadUrl = url.replace('/upload/', '/upload/fl_attachment/');
                 const link = document.createElement('a'); link.href = downloadUrl; link.setAttribute('download', name);
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            const handleLogout = async () => {
+                await supabaseClient.auth.signOut();
+                window.location.href = 'index.html';
             };
 
             useEffect(() => {
@@ -250,7 +256,6 @@
                 return ms;
             }, [ganttRange]);
 
-            // Calcul de la position de la ligne "Aujourd'hui"
             const todayIdx = useMemo(() => {
                 const today = new Date().toDateString();
                 return ganttRange.findIndex(d => d.toDateString() === today);
@@ -270,7 +275,14 @@
                                 <span className="text-[8px] font-black uppercase opacity-50 italic">{activeProject.name}</span>
                             </div>
                         </div>
-                        <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white"><Icon name="home" size={18}/></a>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleLogout} className="p-3 bg-red-500/20 rounded-xl hover:bg-red-500/40 transition-all text-red-400" title="Déconnexion">
+                                <Icon name="logout" size={18}/>
+                            </button>
+                            <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white" title="Accueil">
+                                <Icon name="home" size={18}/>
+                            </a>
+                        </div>
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
@@ -423,7 +435,6 @@
                                         </div>
 
                                         <div className="relative">
-                                            {/* Ligne Rouge Aujourd'hui */}
                                             {todayIdx !== -1 && (
                                                 <div className="today-line" style={{left: (128 + (todayIdx * ganttZoom) + (ganttZoom / 2) - 1) + 'px'}}>
                                                     <div className="today-badge">Aujourd'hui</div>
