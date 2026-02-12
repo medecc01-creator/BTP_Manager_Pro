@@ -51,7 +51,6 @@
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
 
-        // Ajoute X jours ouvrés à une date (saute samedi et dimanche)
         const addBusinessDays = (startDate, days) => {
             let date = new Date(startDate);
             let added = 0;
@@ -127,16 +126,6 @@
 
             const activeProject = projects.find(p => p.id === projectId);
 
-            const getDependencyInfo = (dependsOnId) => {
-                if (!dependsOnId || !activeProject) return null;
-                for (const t of activeProject.tasks) {
-                    const s = t.subtasks.find(sub => sub.id === dependsOnId);
-                    if (s) return { lot: t.title, task: s.title };
-                }
-                return null;
-            };
-
-            // LOGIQUE DE MISE À JOUR AVEC CASCADE ET WEEK-ENDS
             const updateSub = (tId, sId, data) => {
                 let updatedProjects = projects.map(p => p.id === projectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
@@ -307,9 +296,7 @@
                                         </div>
 
                                         <div onDragOver={e => e.preventDefault()}>
-                                        {task.subtasks.map((sub, sIdx) => {
-                                            const depInfo = getDependencyInfo(sub.dependsOn);
-                                            return (
+                                        {task.subtasks.map((sub, sIdx) => (
                                             <div key={sub.id} 
                                                 draggable onDragStart={(e) => { e.stopPropagation(); setDraggedItem({type: 'sub', taskId: task.id, index: sIdx}); }}
                                                 onDrop={(e) => { e.stopPropagation(); if(draggedItem?.type === 'sub' && draggedItem.taskId === task.id) { moveSubtask(task.id, draggedItem.index, sIdx); setDraggedItem(null); } }}
@@ -317,10 +304,7 @@
                                                 <div className="flex flex-col justify-center text-slate-300 cursor-grab active:cursor-grabbing"><Icon name="grip" size={16}/></div>
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
-                                                        <div className="flex flex-col">
-                                                            <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
-                                                            {depInfo && <span className="text-[8px] normal-case text-blue-500 mt-1 flex items-center gap-1"><Icon name="link" size={10} /> Lié à : {depInfo.task}</span>}
-                                                        </div>
+                                                        <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
                                                         <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className={`transition-colors ${sub.dependsOn ? 'text-blue-600' : 'text-slate-300 hover:text-blue-500'}`}><Icon name="link" size={14}/></button>
                                                     </div>
                                                     <div className="flex gap-2">
@@ -332,7 +316,7 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        )})}
+                                        ))}
                                         </div>
                                         <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>
                                     </div>
@@ -413,7 +397,6 @@
                                                     <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
                                                     {task.subtasks.map(sub => {
                                                         const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
-                                                        // Calcul de la largeur réelle (différence entre début et fin hors week-ends)
                                                         const endDate = addBusinessDays(sub.date, sub.duration);
                                                         const diffInDays = Math.ceil((endDate - new Date(sub.date)) / (1000 * 60 * 60 * 24));
                                                         
@@ -493,10 +476,13 @@
                                     <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10 italic">Galerie</h3>
                                     <div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
                                         {(viewer.photos || []).map((file, idx) => {
-                                            const { url } = getFileData(file);
+                                            const { url, name } = getFileData(file);
                                             return (
-                                                <div key={idx} onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/10 cursor-pointer active:scale-95 transition-transform">
-                                                    {url.toLowerCase().endsWith('.pdf') ? <div className="w-full h-full flex items-center justify-center text-red-400"><Icon name="file" size={40}/></div> : <img src={url} className="w-full h-full object-cover"/>}
+                                                <div key={idx} onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="group flex flex-col gap-2">
+                                                    <div className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/10 cursor-pointer active:scale-95 transition-transform flex items-center justify-center shadow-lg">
+                                                        {url.toLowerCase().endsWith('.pdf') ? <div className="text-red-400 scale-150"><Icon name="file" size={40}/></div> : <img src={url} className="w-full h-full object-cover"/>}
+                                                    </div>
+                                                    <span className="text-[9px] text-white/50 truncate px-1 text-center font-bold uppercase tracking-widest">{name}</span>
                                                 </div>
                                             );
                                         })}
@@ -506,23 +492,28 @@
                                 <>
                                     <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase shadow-lg" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
                                     
+                                    {/* NOM DU FICHIER EN HAUT */}
+                                    <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[105] bg-black/50 px-6 py-2 rounded-full border border-white/10 backdrop-blur-md max-w-[250px]">
+                                        <p className="text-white text-[10px] font-black uppercase tracking-widest truncate">{getFileData(viewer.photos[viewer.index]).name}</p>
+                                    </div>
+
                                     <div className="absolute bottom-10 right-6 flex gap-3 z-[110]">
-                                        <button onClick={() => downloadFile(viewer.photos[viewer.index])} className="bg-green-600 text-white p-4 rounded-full shadow-lg"><Icon name="download" size={20}/></button>
-                                        <button className="text-white bg-red-600 p-4 rounded-full shadow-lg" onClick={() => {
+                                        <button onClick={() => downloadFile(viewer.photos[viewer.index])} className="bg-green-600 text-white p-4 rounded-full shadow-lg transition-transform active:scale-90"><Icon name="download" size={20}/></button>
+                                        <button className="text-white bg-red-600 p-4 rounded-full shadow-lg transition-transform active:scale-90" onClick={() => {
                                             const list = [...viewer.photos]; list.splice(viewer.index, 1);
                                             updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
                                             if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
                                         }}><Icon name="trash" size={20}/></button>
                                     </div>
 
-                                    {viewer.index > 0 && <button className="absolute left-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
+                                    {viewer.index > 0 && <button className="absolute left-4 text-white p-4 z-[105] bg-black/20 rounded-full" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
                                     <div className="w-full h-full flex items-center justify-center p-4">
                                         {getFileData(viewer.photos[viewer.index]).url.toLowerCase().endsWith('.pdf') ? 
-                                            <iframe src={getFileData(viewer.photos[viewer.index]).url} className="w-full h-full max-w-3xl border-none bg-white rounded-lg"></iframe> : 
-                                            <img src={getFileData(viewer.photos[viewer.index]).url} className="max-w-full max-h-full object-contain" />
+                                            <iframe src={getFileData(viewer.photos[viewer.index]).url} className="w-full h-full max-w-4xl border-none bg-white rounded-2xl shadow-2xl"></iframe> : 
+                                            <img src={getFileData(viewer.photos[viewer.index]).url} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
                                         }
                                     </div>
-                                    {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
+                                    {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4 z-[105] bg-black/20 rounded-full" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
                                 </>
                             )}
                         </div>
