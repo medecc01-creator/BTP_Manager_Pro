@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gestion de Chantier - Cascade Pro</title>
+    <title>Gestion de Chantier - Cascade Pro & Hors Week-end</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%232563eb%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z%22/></svg>">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -24,6 +24,8 @@
         .sync-loading { background-color: #eab308; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .editable:hover { background: rgba(37, 99, 235, 0.05); border-radius: 4px; cursor: pointer; }
+        /* Style pour les week-ends */
+        .weekend-cell { background-color: #f8fafc; background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(226, 232, 240, 0.4) 5px, rgba(226, 232, 240, 0.4) 10px); }
     </style>
 </head>
 <body>
@@ -50,6 +52,19 @@
         const CLOUD_NAME = "dzhkqkzrg";
         const UPLOAD_PRESET = "BTP_MP";
 
+        // Fonction utilitaire : Ajouter des jours sans compter les week-ends
+        const addBusinessDays = (startDate, days) => {
+            let date = new Date(startDate);
+            let added = 0;
+            const targetDays = parseInt(days) || 0;
+            if (targetDays <= 0) return date;
+            while (added < targetDays) {
+                date.setDate(date.getDate() + 1);
+                if (date.getDay() !== 0 && date.getDay() !== 6) added++;
+            }
+            return date;
+        };
+
         const Icon = ({ name, size = 20, color = "currentColor" }) => {
             const icons = {
                 home: <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
@@ -61,7 +76,7 @@
                 up: <path d="m18 15-6-6-6 6" />,
                 down: <path d="m6 9 6 6 6-6" />,
                 left: <path d="m15 18-6-6 6-6" />,
-                right: <path d="m9 18 6-6-6-6" />,
+                right: <path d="m9 18 6-6 6-6" />,
                 link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />,
                 x: <path d="M18 6 6 18M6 6l12 12" />,
                 file: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>,
@@ -93,12 +108,8 @@
             const downloadFile = (file) => {
                 const { url, name } = getFileData(file);
                 const downloadUrl = url.replace('/upload/', '/upload/fl_attachment/');
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.setAttribute('download', name);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                const link = document.createElement('a'); link.href = downloadUrl; link.setAttribute('download', name);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
             };
 
             useEffect(() => {
@@ -110,8 +121,7 @@
             useEffect(() => { if (user) return window.DatabaseOps.subscribeData(setProjects); }, [user]);
 
             const triggerSync = async (updatedProjects) => {
-                setProjects(updatedProjects);
-                setIsSyncing(true);
+                setProjects(updatedProjects); setIsSyncing(true);
                 await window.DatabaseOps.saveData(updatedProjects);
                 setTimeout(() => setIsSyncing(false), 800);
             };
@@ -127,9 +137,8 @@
                 return null;
             };
 
-            // FONCTION DE MISE À JOUR AVEC CASCADE
+            // FONCTION DE MISE À JOUR AVEC CASCADE ET HORS WEEK-END
             const updateSub = (tId, sId, data) => {
-                // 1. Appliquer la modification initiale
                 let updatedProjects = projects.map(p => p.id === projectId ? {
                     ...p, tasks: p.tasks.map(t => t.id === tId ? {
                         ...t, subtasks: sId === 'new' ? 
@@ -138,7 +147,6 @@
                     } : t)
                 } : p);
 
-                // 2. Propagation en cascade (Boucle de stabilisation)
                 let hasChanged = true;
                 while (hasChanged) {
                     hasChanged = false;
@@ -154,16 +162,9 @@
                                     if (s.dependsOn) {
                                         const parent = allSubtasks.find(ts => ts.id === s.dependsOn);
                                         if (parent) {
-                                            const parentStart = new Date(parent.date);
-                                            const parentDuration = parseInt(parent.duration) || 0;
-                                            const newStartDate = new Date(parentStart);
-                                            newStartDate.setDate(newStartDate.getDate() + parentDuration);
+                                            const newStartDate = addBusinessDays(parent.date, parent.duration);
                                             const newDateStr = newStartDate.toISOString().split('T')[0];
-
-                                            if (s.date !== newDateStr) {
-                                                hasChanged = true;
-                                                return { ...s, date: newDateStr };
-                                            }
+                                            if (s.date !== newDateStr) { hasChanged = true; return { ...s, date: newDateStr }; }
                                         }
                                     }
                                     return s;
@@ -176,42 +177,17 @@
             };
 
             const moveLot = (fromIndex, toIndex) => {
-                if (fromIndex === toIndex) return;
                 const updatedProjects = projects.map(p => {
                     if (p.id !== projectId) return p;
-                    const newTasks = [...p.tasks];
-                    const [moved] = newTasks.splice(fromIndex, 1);
-                    newTasks.splice(toIndex, 0, moved);
+                    const newTasks = [...p.tasks]; const [moved] = newTasks.splice(fromIndex, 1); newTasks.splice(toIndex, 0, moved);
                     return { ...p, tasks: newTasks };
                 });
                 triggerSync(updatedProjects);
             };
 
-            const moveSubtask = (taskId, fromIndex, toIndex) => {
-                if (fromIndex === toIndex) return;
-                const updatedProjects = projects.map(p => {
-                    if (p.id !== projectId) return p;
-                    return {
-                        ...p,
-                        tasks: p.tasks.map(t => {
-                            if (t.id !== taskId) return t;
-                            const newSubtasks = [...t.subtasks];
-                            const [moved] = newSubtasks.splice(fromIndex, 1);
-                            newSubtasks.splice(toIndex, 0, moved);
-                            return { ...t, subtasks: newSubtasks };
-                        })
-                    };
-                });
-                triggerSync(updatedProjects);
-            };
-
             const handleFileUpload = async (e, tId, sId, field) => {
-                const file = e.target.files[0];
-                if(!file) return;
-                const originalName = file.name;
-                const fd = new FormData();
-                fd.append('file', file);
-                fd.append('upload_preset', UPLOAD_PRESET);
+                const file = e.target.files[0]; if(!file) return;
+                const originalName = file.name; const fd = new FormData(); fd.append('file', file); fd.append('upload_preset', UPLOAD_PRESET);
                 const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: fd });
                 const json = await res.json();
                 const currentFiles = activeProject.tasks.find(t => t.id === tId).subtasks.find(s => s.id === sId)[field] || [];
@@ -221,26 +197,17 @@
             const ganttRange = useMemo(() => {
                 const subtasks = activeProject?.tasks?.flatMap(t => t.subtasks) || [];
                 const dates = subtasks.length > 0 ? subtasks.map(s => new Date(s.date)) : [new Date()];
-                const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 15);
+                const start = new Date(Math.min(...dates)); start.setDate(start.getDate() - 7);
                 const end = new Date(Math.max(...dates)); end.setDate(end.getDate() + 90);
-                const result = [];
-                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) result.push(new Date(d));
+                const result = []; for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) result.push(new Date(d));
                 return result;
             }, [activeProject]);
 
             const months = useMemo(() => {
-                const ms = [];
-                let currentMonth = "";
-                let count = 0;
+                const ms = []; let currentMonth = ""; let count = 0;
                 ganttRange.forEach(date => {
                     const mName = date.toLocaleDateString('fr-FR', { month: 'long', year: '2-digit' });
-                    if (mName !== currentMonth) {
-                        if (currentMonth) ms.push({ name: currentMonth, count });
-                        currentMonth = mName;
-                        count = 1;
-                    } else {
-                        count++;
-                    }
+                    if (mName !== currentMonth) { if (currentMonth) ms.push({ name: currentMonth, count }); currentMonth = mName; count = 1; } else { count++; }
                 });
                 if (currentMonth) ms.push({ name: currentMonth, count });
                 return ms;
@@ -255,7 +222,7 @@
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-800">
-                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50">
+                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50 shadow-lg">
                         <div className="flex flex-col">
                             <h1 className="font-black italic text-xs uppercase tracking-tighter">BTP Manager Pro</h1>
                             <div className="flex items-center mt-0.5">
@@ -263,14 +230,12 @@
                                 <span className="text-[8px] font-black uppercase opacity-50 italic">{isSyncing ? 'Synchronisation...' : activeProject.name}</span>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white"><Icon name="home" size={18}/></a>
-                        </div>
+                        <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white"><Icon name="home" size={18}/></a>
                     </header>
 
                     <main className="flex-1 overflow-y-auto bg-slate-50 relative pb-32">
                         {currentView === 'budget' && (
-                            <div className="p-6 max-w-2xl mx-auto space-y-6 pb-32">
+                            <div className="p-6 max-w-2xl mx-auto space-y-6">
                                 <div className="bg-slate-900 text-white p-10 rounded-[40px] text-center shadow-2xl font-black italic uppercase border-4 border-white/5">
                                     <p className="text-[10px] opacity-40 mb-2 font-bold tracking-widest">Total Prévisionnel HT</p>
                                     <p className="text-4xl">{activeProject.tasks.reduce((acc, t) => acc + t.subtasks.reduce((s, sub) => s + (parseFloat(sub.cost) || 0), 0), 0).toLocaleString()} €</p>
@@ -301,7 +266,7 @@
                                                     </div>
                                                     <label className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all">
                                                         <Icon name="camera" size={14} color="#2563eb"/>
-                                                        <span className="text-[9px] font-black uppercase text-blue-600">Facture / Ticket</span>
+                                                        <span className="text-[9px] font-black uppercase text-blue-600">Facture</span>
                                                         <input type="file" className="hidden" accept="image/*,application/pdf" onChange={e => handleFileUpload(e, task.id, sub.id, 'invoices')}/>
                                                     </label>
                                                 </div>
@@ -317,70 +282,47 @@
                                 <h2 className="text-xl font-black uppercase italic editable" onClick={() => setDialog({open: true, title: "Renommer Chantier", value: activeProject.name, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, name: v} : p))})}>{activeProject.name}</h2>
                                 {activeProject.tasks.map((task, taskIdx) => (
                                     <div key={task.id} 
-                                        draggable
-                                        onDragStart={(e) => {
-                                            if (e.target.closest('.editable') || e.target.closest('button') || e.target.closest('input')) return;
-                                            setDraggedItem({type: 'lot', index: taskIdx});
-                                        }}
+                                        draggable onDragStart={(e) => { if (e.target.closest('.editable') || e.target.closest('button')) return; setDraggedItem({type: 'lot', index: taskIdx}); }}
                                         onDragOver={e => e.preventDefault()}
-                                        onDrop={() => {
-                                            if(draggedItem && draggedItem.type === 'lot') {
-                                                moveLot(draggedItem.index, taskIdx);
-                                                setDraggedItem(null);
-                                            }
-                                        }}
-                                        className={`bg-white p-6 rounded-[32px] border shadow-sm transition-all hover:shadow-md ${draggedItem?.type === 'lot' && draggedItem.index === taskIdx ? 'opacity-40 border-dashed border-blue-500 scale-95' : ''}`}>
+                                        onDrop={() => { if(draggedItem?.type === 'lot') { moveLot(draggedItem.index, taskIdx); setDraggedItem(null); } }}
+                                        className={`bg-white p-6 rounded-[32px] border shadow-sm transition-all ${draggedItem?.type === 'lot' && draggedItem.index === taskIdx ? 'opacity-40 border-dashed border-blue-500 scale-95' : ''}`}>
                                         
                                         <div className="flex justify-between mb-4 items-center">
                                             <div className="flex items-center gap-2">
-                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500 transition-colors">
-                                                    <Icon name="grip" size={18}/>
-                                                </div>
+                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500 transition-colors"><Icon name="grip" size={18}/></div>
                                                 <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Nom du Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
                                             </div>
                                             <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
                                         </div>
 
-                                        <div onDragOver={e => e.preventDefault()}>
-                                        {task.subtasks.map((sub, index) => {
+                                        <div className="space-y-3">
+                                        {task.subtasks.map((sub) => {
                                             const depInfo = getDependencyInfo(sub.dependsOn);
                                             return (
-                                            <div key={sub.id} 
-                                                draggable
-                                                onDragStart={(e) => {
-                                                    e.stopPropagation();
-                                                    setDraggedItem({type: 'sub', taskId: task.id, index});
-                                                }}
-                                                onDrop={(e) => {
-                                                    e.stopPropagation();
-                                                    if(draggedItem && draggedItem.type === 'sub' && draggedItem.taskId === task.id) {
-                                                        moveSubtask(task.id, draggedItem.index, index);
-                                                        setDraggedItem(null);
-                                                    }
-                                                }}
-                                                className={`mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 group active:cursor-grabbing cursor-grab hover:border-blue-300 transition-colors ${draggedItem?.type === 'sub' && draggedItem.index === index && draggedItem.taskId === task.id ? 'opacity-30 border-blue-500 border-dashed' : ''}`}>
-                                                <div className="flex flex-col justify-center text-slate-300 group-hover:text-blue-400"><Icon name="grip" size={16}/></div>
+                                            <div key={sub.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 transition-colors hover:border-blue-300">
                                                 <div className="flex-1">
                                                     <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
                                                         <div className="flex flex-col">
                                                             <span className="editable" onClick={() => setDialog({open: true, title: "Nom de la Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
-                                                            {depInfo && (
-                                                                <span className="text-[8px] normal-case text-blue-500 mt-1 flex items-center gap-1">
-                                                                    <Icon name="link" size={10} /> Lier à : {depInfo.lot} - {depInfo.task}
-                                                                </span>
-                                                            )}
+                                                            {depInfo && <span className="text-[8px] normal-case text-blue-500 mt-1 flex items-center gap-1"><Icon name="link" size={10} /> Lié à : {depInfo.task}</span>}
                                                         </div>
                                                         <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className={`transition-colors ${sub.dependsOn ? 'text-blue-600' : 'text-slate-300 hover:text-blue-500'}`}><Icon name="link" size={14}/></button>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="flex-1 p-2 rounded-xl text-xs font-bold bg-white outline-none"/>
-                                                        <input type="number" value={sub.duration} onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-16 p-2 rounded-xl text-xs font-bold text-center bg-white outline-none"/>
+                                                        <div className="flex-1 bg-white rounded-xl p-2 flex items-center gap-2 border">
+                                                            <Icon name="calendar" size={12} color="#94a3b8"/>
+                                                            <input type="date" value={sub.date} onChange={e => updateSub(task.id, sub.id, {date: e.target.value})} className="w-full text-xs font-bold outline-none"/>
+                                                        </div>
+                                                        <div className="w-20 bg-white rounded-xl p-2 flex items-center gap-1 border">
+                                                            <input type="number" value={sub.duration} onChange={e => updateSub(task.id, sub.id, {duration: e.target.value})} className="w-full text-xs font-bold text-center outline-none"/>
+                                                            <span className="text-[8px] font-black opacity-30">J</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         )})}
                                         </div>
-                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>
+                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 mt-3 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>
                                     </div>
                                 ))}
                                 <button onClick={() => setDialog({open: true, title: "Nouveau Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
@@ -393,7 +335,7 @@
                                     <div key={sub.id} className="bg-white p-6 rounded-[32px] border shadow-sm">
                                         <div className="flex justify-between items-start mb-6">
                                             <div><p className="text-[8px] font-black text-blue-600 uppercase mb-1">{task.title}</p><h3 className="font-black uppercase text-sm text-slate-800">{sub.title}</h3></div>
-                                            <label className="p-3 bg-blue-600 text-white rounded-2xl cursor-pointer shadow-lg">
+                                            <label className="p-3 bg-blue-600 text-white rounded-2xl cursor-pointer shadow-lg active:scale-90 transition-transform">
                                                 <Icon name="camera" size={20}/>
                                                 <input type="file" capture="camera" className="hidden" onChange={e => handleFileUpload(e, task.id, sub.id, 'photos')}/>
                                             </label>
@@ -421,10 +363,10 @@
                                 <div className="p-3 border-b flex justify-between items-center bg-slate-50 shrink-0">
                                     <div className="flex items-center gap-3">
                                         <span className="text-[8px] font-black opacity-40 uppercase tracking-tighter">Zoom</span>
-                                        <input type="range" min="10" max="100" value={ganttZoom} onChange={e => setGanttZoom(parseInt(e.target.value))} className="w-24 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
+                                        <input type="range" min="15" max="120" value={ganttZoom} onChange={e => setGanttZoom(parseInt(e.target.value))} className="w-24 h-1 bg-slate-200 rounded-lg appearance-none accent-blue-600"/>
                                     </div>
                                     <div className="flex items-center gap-1.5 px-3 py-1 bg-white rounded-full border border-slate-200 shadow-sm">
-                                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                        <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_red]"></div>
                                         <span className="text-[9px] font-black text-slate-500 uppercase">Aujourd'hui</span>
                                     </div>
                                 </div>
@@ -440,9 +382,9 @@
                                                 ))}
                                             </div>
                                             <div className="flex">
-                                                <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic flex items-center justify-center">PLANNING</div>
+                                                <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic flex items-center justify-center">GRILLE</div>
                                                 {ganttRange.map((d, i) => (
-                                                    <div key={i} style={{width: ganttZoom+'px'}} className="shrink-0 text-center py-1 border-r border-white/5">
+                                                    <div key={i} style={{width: ganttZoom+'px'}} className={`shrink-0 text-center py-1 border-r border-white/5 ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-slate-700/50' : ''}`}>
                                                         <div className="text-[9px] font-black opacity-60">{d.getDate()}</div>
                                                     </div>
                                                 ))}
@@ -451,10 +393,7 @@
 
                                         <div className="relative">
                                             {todayIndex !== -1 && (
-                                                <div 
-                                                    style={{left: (128 + todayIndex * ganttZoom + (ganttZoom/2)) + 'px'}} 
-                                                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                                                ></div>
+                                                <div style={{left: (128 + todayIndex * ganttZoom + (ganttZoom/2)) + 'px'}} className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none"></div>
                                             )}
 
                                             {activeProject.tasks.map(task => (
@@ -462,18 +401,21 @@
                                                     <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[7px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
                                                     {task.subtasks.map(sub => {
                                                         const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
+                                                        // Calcul de la durée visuelle réelle (incluant les week-ends)
+                                                        const endDate = addBusinessDays(sub.date, sub.duration);
+                                                        const diffInDays = Math.ceil((endDate - new Date(sub.date)) / (1000 * 60 * 60 * 24));
+                                                        
                                                         return (
                                                             <div key={sub.id} className="flex h-10 items-center relative border-t border-slate-50">
                                                                 <div className="w-32 shrink-0 px-3 text-[8px] font-bold text-slate-500 sticky-col left-0 z-30 border-r bg-white truncate">{sub.title}</div>
-                                                                {ganttRange.map((_, i) => <div key={i} style={{width: ganttZoom+'px'}} className="h-full shrink-0 border-r border-slate-50"></div>)}
+                                                                {ganttRange.map((d, i) => (
+                                                                    <div key={i} style={{width: ganttZoom+'px'}} className={`h-full shrink-0 border-r border-slate-50 ${d.getDay() === 0 || d.getDay() === 6 ? 'weekend-cell' : ''}`}></div>
+                                                                ))}
                                                                 {startIdx !== -1 && (
-                                                                    <div className="absolute h-5 bg-blue-600 rounded shadow-sm z-20 flex items-center justify-center overflow-hidden border border-blue-400 group cursor-help" 
-                                                                        style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, sub.duration) * ganttZoom)+'px'}}>
-                                                                        <div className="h-full bg-green-500 absolute left-0 top-0 transition-all" style={{width: (sub.progress || 0)+'%'}}></div>
+                                                                    <div className="absolute h-6 bg-blue-600 rounded-lg shadow-sm z-20 flex items-center justify-center overflow-hidden border border-blue-400 group cursor-pointer" 
+                                                                        style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, diffInDays) * ganttZoom)+'px'}}>
+                                                                        <div className="h-full bg-green-500 absolute left-0 top-0 transition-all opacity-80" style={{width: (sub.progress || 0)+'%'}}></div>
                                                                         <span className="relative z-20 text-[7px] font-black text-white">{sub.progress || 0}%</span>
-                                                                        <div className="absolute -top-8 left-0 bg-slate-900 text-white p-2 rounded text-[8px] hidden group-hover:block whitespace-nowrap z-50">
-                                                                            {sub.title} ({sub.duration}j)
-                                                                        </div>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -499,12 +441,12 @@
 
                     {dialog.open && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl text-slate-800">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
-                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none ring-2 ring-blue-50 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />}
+                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none focus:ring-2 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} onKeyDown={e => { if(e.key === 'Enter') { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); } }} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
-                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl shadow-lg" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
+                                    <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>OK</button>
                                 </div>
                             </div>
                         </div>
@@ -517,8 +459,7 @@
                                 <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                                     {activeProject.tasks.flatMap(t => t.subtasks.map(s => ({...s, lot: t.title}))).filter(s => s.id !== linkDialog.subId).map(other => (
                                         <button key={other.id} className="w-full text-left p-4 rounded-2xl border border-slate-100 hover:bg-blue-50 transition-all" onClick={() => {
-                                            const d = new Date(other.date); d.setDate(d.getDate() + (parseInt(other.duration) || 0));
-                                            updateSub(linkDialog.taskId, linkDialog.subId, { date: d.toISOString().split('T')[0], dependsOn: other.id });
+                                            updateSub(linkDialog.taskId, linkDialog.subId, { dependsOn: other.id });
                                             setLinkDialog({ open: false });
                                         }}>
                                             <span className="text-[8px] font-black text-blue-600 uppercase block mb-1">{other.lot}</span>
@@ -535,64 +476,37 @@
                     {viewer.open && (
                         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center">
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full z-[110]" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
-                            {viewer.mode === 'grid' && (
+                            {viewer.mode === 'grid' ? (
                                 <div className="w-full h-full p-6 overflow-y-auto">
-                                    <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10">Galerie</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 max-w-2xl mx-auto">
+                                    <h3 className="text-white text-center font-black uppercase text-xl mb-6 mt-10 italic">Galerie</h3>
+                                    <div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
                                         {(viewer.photos || []).map((file, idx) => {
-                                            const { url, name } = getFileData(file);
-                                            const isPdf = url.toLowerCase().endsWith('.pdf');
+                                            const { url } = getFileData(file);
                                             return (
-                                                <div key={idx} className="flex flex-col gap-2">
-                                                    <div onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/10 relative cursor-pointer active:scale-95 transition-transform">
-                                                        {isPdf ? 
-                                                            <div className="w-full h-full flex items-center justify-center text-red-400"><Icon name="file" size={40}/></div> 
-                                                            : <img src={url} className="w-full h-full object-cover"/>
-                                                        }
-                                                    </div>
-                                                    <span className="text-white text-[9px] truncate text-center px-1 opacity-60 font-bold">{name}</span>
+                                                <div key={idx} onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/10 cursor-pointer active:scale-95 transition-transform shadow-lg">
+                                                    {url.toLowerCase().endsWith('.pdf') ? <div className="w-full h-full flex items-center justify-center text-red-400"><Icon name="file" size={40}/></div> : <img src={url} className="w-full h-full object-cover"/>}
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
-                            )}
-                            {viewer.mode === 'view' && (
+                            ) : (
                                 <>
-                                    {(() => {
-                                        const currentFile = viewer.photos[viewer.index];
-                                        const { url, name } = getFileData(currentFile);
-                                        const isPdf = url.toLowerCase().endsWith('.pdf');
-                                        return (
-                                            <>
-                                                <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
-                                                
-                                                <div className="absolute bottom-10 right-6 flex gap-3 z-[110]">
-                                                    <button onClick={() => downloadFile(currentFile)} className="bg-green-600 text-white p-4 rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform">
-                                                        <Icon name="download" size={20}/>
-                                                    </button>
-                                                    
-                                                    <button className="text-white bg-red-600/80 p-4 rounded-full" onClick={() => setDialog({open: true, title: "Supprimer ?", type: 'confirm', onConfirm: () => {
-                                                        const list = [...viewer.photos]; list.splice(viewer.index, 1);
-                                                        updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
-                                                        if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
-                                                    }})}><Icon name="trash" size={20}/></button>
-                                                </div>
-
-                                                {viewer.index > 0 && <button className="absolute left-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index - 1})}><Icon name="left" size={40}/></button>}
-                                                
-                                                <div className="w-full h-full flex items-center justify-center p-4">
-                                                    {isPdf ? (
-                                                        <iframe src={url} className="w-full h-full max-w-3xl border-none bg-white rounded-lg"></iframe>
-                                                    ) : (
-                                                        <img src={url} className="max-w-full max-h-full object-contain" />
-                                                    )}
-                                                </div>
-
-                                                {viewer.index < viewer.photos.length - 1 && <button className="absolute right-4 text-white p-4 z-[105]" onClick={() => setViewer({...viewer, index: viewer.index + 1})}><Icon name="right" size={40}/></button>}
-                                            </>
-                                        );
-                                    })()}
+                                    <button className="absolute top-6 left-6 text-white bg-blue-600 p-3 rounded-xl z-[110] font-bold text-xs uppercase shadow-lg" onClick={() => setViewer({...viewer, mode: 'grid'})}>‹ Galerie</button>
+                                    <div className="absolute bottom-10 right-6 flex gap-3 z-[110]">
+                                        <button onClick={() => downloadFile(viewer.photos[viewer.index])} className="bg-green-600 text-white p-4 rounded-full shadow-lg"><Icon name="download" size={20}/></button>
+                                        <button className="text-white bg-red-600 p-4 rounded-full shadow-lg" onClick={() => {
+                                            const list = [...viewer.photos]; list.splice(viewer.index, 1);
+                                            updateSub(viewer.taskId, viewer.subId, { [viewer.field]: list });
+                                            if(list.length === 0) setViewer({...viewer, open: false}); else setViewer({...viewer, photos: list, index: 0});
+                                        }}><Icon name="trash" size={20}/></button>
+                                    </div>
+                                    <div className="w-full h-full flex items-center justify-center p-4">
+                                        {getFileData(viewer.photos[viewer.index]).url.toLowerCase().endsWith('.pdf') ? 
+                                            <iframe src={getFileData(viewer.photos[viewer.index]).url} className="w-full h-full max-w-3xl border-none bg-white rounded-lg"></iframe> : 
+                                            <img src={getFileData(viewer.photos[viewer.index]).url} className="max-w-full max-h-full object-contain" />
+                                        }
+                                    </div>
                                 </>
                             )}
                         </div>
