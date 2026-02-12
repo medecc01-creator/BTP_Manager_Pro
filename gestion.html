@@ -118,51 +118,42 @@
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
             };
 
-            const handleLogout = async () => {
-                await supabaseClient.auth.signOut();
-                window.location.href = 'index.html';
-            };
-
-            // Fonction de chargement robuste
-            const loadAppData = useCallback(async (sessionUser) => {
-                setUser(sessionUser);
+            // LOGIQUE DE SESSION AMELIOREE
+            const loadAppData = useCallback(async (u) => {
+                setUser(u);
                 try {
                     const data = await window.DatabaseOps.fetchInitialData();
                     setProjects(data || []);
-                } catch (e) {
-                    console.error("Erreur chargement", e);
                 } finally {
                     setIsLoading(false);
                 }
             }, []);
 
             useEffect(() => {
-                // 1. Vérifier session immédiate
-                supabaseClient.auth.getSession().then(({ data: { session } }) => {
-                    if (session) loadAppData(session.user);
-                    else {
-                        // Si pas de session, on attend 1.5s avant de dire que c'est fini (évite le flash)
-                        setTimeout(() => setIsLoading(prev => prev ? true : false), 1500);
+                const checkSession = async () => {
+                    const { data: { session } } = await supabaseClient.auth.getSession();
+                    if (session) {
+                        loadAppData(session.user);
+                    } else {
+                        // Petit délai de sécurité pour la redirection
+                        setTimeout(async () => {
+                            const { data: { session: retry } } = await supabaseClient.auth.getSession();
+                            if (retry) loadAppData(retry.user);
+                            else { setIsLoading(false); window.location.href = 'index.html'; }
+                        }, 800);
                     }
-                });
+                };
+                checkSession();
 
-                // 2. Écouter les changements (Connexion/Déconnexion)
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
                     if (session) loadAppData(session.user);
                     else if (event === 'SIGNED_OUT') window.location.href = 'index.html';
                 });
-
                 return () => subscription.unsubscribe();
             }, [loadAppData]);
 
-            // Abonnement aux changements temps réel une fois le user chargé
             useEffect(() => { 
-                if (user) {
-                    const unsubscribe = window.DatabaseOps.subscribeData((newData) => {
-                        setProjects(newData || []);
-                    });
-                    return unsubscribe;
-                }
+                if (user) return window.DatabaseOps.subscribeData(setProjects);
             }, [user]);
 
             const triggerSync = async (updatedProjects) => {
@@ -253,11 +244,9 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            // Affichages d'états
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-[10px] tracking-widest animate-pulse text-slate-400">Synchronisation...</div>;
-            if (!user) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-900 text-white"><div className="font-black uppercase text-xs tracking-widest opacity-50">Session expirée</div><a href="index.html" className="px-8 py-3 bg-blue-600 rounded-2xl font-black text-xs uppercase">Se connecter</a></div>;
-            if (!activeProject && projects.length > 0) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50"><div className="font-black uppercase text-xs text-slate-400 italic">Chargement du projet...</div></div>;
-            if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50"><div className="font-black uppercase text-xs text-slate-400 tracking-widest">Aucun projet trouvé</div><a href="index.html" className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase">Retour</a></div>;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-black uppercase text-[10px] tracking-widest animate-pulse text-slate-400">Chargement...</div>;
+            if (!user) return null;
+            if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50 p-10 text-center"><div className="font-black uppercase text-xs text-slate-400 italic">Données du chantier introuvables</div><button onClick={() => window.location.reload()} className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase">Actualiser</button></div>;
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
 
@@ -272,10 +261,10 @@
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleLogout} className="p-3 bg-red-500/20 rounded-xl hover:bg-red-500/40 transition-all text-red-400" title="Déconnexion">
+                            <button onClick={() => { supabaseClient.auth.signOut(); window.location.href='index.html'; }} className="p-3 bg-red-500/20 rounded-xl text-red-400 shadow-inner">
                                 <Icon name="logout" size={18}/>
                             </button>
-                            <a href="index.html" className="p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all text-white" title="Accueil">
+                            <a href="index.html" className="p-3 bg-white/10 rounded-xl text-white shadow-inner">
                                 <Icon name="home" size={18}/>
                             </a>
                         </div>
@@ -430,11 +419,7 @@
                                             </div>
                                         </div>
                                         <div className="relative">
-                                            {todayIdx !== -1 && (
-                                                <div className="today-line" style={{left: (128 + (todayIdx * ganttZoom) + (ganttZoom / 2) - 1) + 'px'}}>
-                                                    <div className="today-badge">Aujourd'hui</div>
-                                                </div>
-                                            )}
+                                            {todayIdx !== -1 && <div className="today-line" style={{left: (128 + (todayIdx * ganttZoom) + (ganttZoom / 2) - 1) + 'px'}}><div className="today-badge">Aujourd'hui</div></div>}
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex">
@@ -486,6 +471,21 @@
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {linkDialog.open && (
+                        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                                <h3 className="text-lg font-black uppercase italic mb-6 text-center shrink-0">Lier après...</h3>
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                    <button className="w-full p-4 rounded-2xl text-left font-bold text-xs bg-slate-100 uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: null}); setLinkDialog({open: false}); }}>Aucun lien</button>
+                                    {activeProject.tasks.flatMap(t => t.subtasks).filter(s => s.id !== linkDialog.subId).map(s => (
+                                        <button key={s.id} className="w-full p-4 rounded-2xl text-left font-bold text-xs bg-slate-50 border hover:bg-blue-50 transition-all uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: s.id}); setLinkDialog({open: false}); }}>{s.title}</button>
+                                    ))}
+                                </div>
+                                <button className="mt-6 w-full py-4 font-black uppercase text-slate-400 shrink-0" onClick={() => setLinkDialog({open: false})}>Annuler</button>
                             </div>
                         </div>
                     )}
