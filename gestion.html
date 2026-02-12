@@ -16,7 +16,7 @@
         .custom-scrollbar-h::-webkit-scrollbar { height: 14px !important; display: block !important; }
         .custom-scrollbar-h::-webkit-scrollbar-track { background: #e2e8f0; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 2px solid #e2e8f0; }
-        .sticky-col { position: sticky; left: 0; z-index: 45; background: white; box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1); }
+        .sticky-col { position: sticky; left: 0; z-index: 45; background-color: white !important; opacity: 1 !important; box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1); }
         .photo-stack { position: relative; width: 60px; height: 60px; }
         .photo-stack-img { position: absolute; width: 45px; height: 45px; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-radius: 8px; transition: transform 0.3s ease; background: #fff; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
@@ -368,9 +368,9 @@
                                 </div>
                                 <div className="flex-1 custom-scrollbar-h relative">
                                     <div className="inline-block min-w-full">
-                                        <div className="sticky top-0 z-40 bg-slate-800 text-white shadow-md">
+                                        <div className="sticky top-0 z-50 bg-slate-800 text-white shadow-md">
                                             <div className="flex border-b border-white/10">
-                                                <div className="w-32 shrink-0 bg-slate-800 sticky left-0 z-50 border-r border-white/10"></div>
+                                                <div className="w-32 shrink-0 bg-slate-800 sticky left-0 z-[60] border-r border-white/10"></div>
                                                 {months.map((m, i) => (
                                                     <div key={i} style={{width: (m.count * ganttZoom) + 'px'}} className="shrink-0 text-center py-1 border-r border-white/5 bg-slate-800/50">
                                                         <span className="text-[9px] font-black uppercase tracking-widest opacity-80">{m.name}</span>
@@ -378,7 +378,7 @@
                                                 ))}
                                             </div>
                                             <div className="flex">
-                                                <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-50 bg-slate-800 border-r border-white/10 italic flex items-center justify-center uppercase">Lots / Tâches</div>
+                                                <div className="w-32 shrink-0 p-2 text-[8px] font-black sticky left-0 z-[60] bg-slate-800 border-r border-white/10 italic flex items-center justify-center uppercase">Lots / Tâches</div>
                                                 {ganttRange.map((d, i) => (
                                                     <div key={i} style={{width: ganttZoom+'px'}} className={`shrink-0 text-center py-1 border-r border-white/5 ${d.getDay() === 0 || d.getDay() === 6 ? 'bg-slate-700/50' : ''}`}>
                                                         <div className="text-[9px] font-black opacity-60">{d.getDate()}</div>
@@ -394,7 +394,11 @@
 
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
-                                                    <div className="flex bg-blue-50/40"><div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">{task.title}</div></div>
+                                                    <div className="flex bg-blue-50/40">
+                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r bg-white">
+                                                            {task.title}
+                                                        </div>
+                                                    </div>
                                                     {task.subtasks.map(sub => {
                                                         const startIdx = ganttRange.findIndex(d => d.toDateString() === new Date(sub.date).toDateString());
                                                         const endDate = addBusinessDays(sub.date, sub.duration);
@@ -402,8 +406,10 @@
                                                         
                                                         return (
                                                             <div key={sub.id} className="flex h-10 items-center relative border-t border-slate-50">
-                                                                {/* Taille de police augmentée de 30% ici (text-[11px] au lieu de 8px) */}
-                                                                <div className="w-32 shrink-0 px-3 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r bg-white truncate leading-none">{sub.title}</div>
+                                                                {/* Correction ici : bg-white forcé et retrait de leading-none pour éviter les lettres coupées */}
+                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r bg-white truncate flex items-center">
+                                                                    {sub.title}
+                                                                </div>
                                                                 {ganttRange.map((d, i) => (
                                                                     <div key={i} style={{width: ganttZoom+'px'}} className={`h-full shrink-0 border-r border-slate-50 ${d.getDay() === 0 || d.getDay() === 6 ? 'weekend-cell' : ''}`}></div>
                                                                 ))}
