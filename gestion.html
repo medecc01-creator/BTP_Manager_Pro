@@ -16,7 +16,17 @@
         .custom-scrollbar-h::-webkit-scrollbar { height: 14px !important; display: block !important; }
         .custom-scrollbar-h::-webkit-scrollbar-track { background: #e2e8f0; }
         .custom-scrollbar-h::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; border: 2px solid #e2e8f0; }
-        .sticky-col { position: sticky; left: 0; z-index: 45; background-color: white !important; opacity: 1 !important; box-shadow: 4px 0 10px -5px rgba(0,0,0,0.1); }
+        
+        /* Correction Opacité Totale Colonne Gauche */
+        .sticky-col { 
+            position: sticky; 
+            left: 0; 
+            z-index: 40; 
+            background-color: #ffffff !important; 
+            opacity: 1 !important; 
+            box-shadow: 4px 0 8px -2px rgba(0,0,0,0.1);
+        }
+
         .photo-stack { position: relative; width: 60px; height: 60px; }
         .photo-stack-img { position: absolute; width: 45px; height: 45px; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); border-radius: 8px; transition: transform 0.3s ease; background: #fff; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
@@ -395,7 +405,7 @@
                                             {activeProject.tasks.map(task => (
                                                 <div key={task.id} className="border-b">
                                                     <div className="flex bg-blue-50/40">
-                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r bg-white">
+                                                        <div className="w-32 shrink-0 p-2 text-[10px] font-black uppercase text-blue-600 sticky-col left-0 z-30 border-r">
                                                             {task.title}
                                                         </div>
                                                     </div>
@@ -405,9 +415,9 @@
                                                         const diffInDays = Math.ceil((endDate - new Date(sub.date)) / (1000 * 60 * 60 * 24));
                                                         
                                                         return (
-                                                            /* Passage à h-8 pour réduire l'espace entre les tâches */
                                                             <div key={sub.id} className="flex h-8 items-center relative border-t border-slate-50">
-                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r bg-white truncate flex items-center">
+                                                                {/* Colonne gauche 100% Blanche et opaque */}
+                                                                <div className="w-32 shrink-0 px-3 py-1 text-[11px] font-semibold text-slate-700 sticky-col left-0 z-30 border-r truncate flex items-center">
                                                                     {sub.title}
                                                                 </div>
                                                                 {ganttRange.map((d, i) => (
