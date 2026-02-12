@@ -20,7 +20,6 @@
         .sticky-col { position: sticky !important; left: 0 !important; z-index: 100 !important; background-color: white !important; }
         .sticky-shadow { box-shadow: 8px 0 15px -5px rgba(0,0,0,0.1); }
 
-        /* Style Week-end Hachuré (uniquement pour le corps) */
         .weekend-cell { 
             background-color: #f8fafc;
             background-image: repeating-linear-gradient(45deg, #f1f5f9 0px, #f1f5f9 2px, transparent 2px, transparent 8px);
@@ -124,7 +123,7 @@
             const [linkDialog, setLinkDialog] = useState({ open: false, taskId: null, subId: null });
 
             const getFileData = (file) => {
-                if (!file) return { url: '', name: 'Fichier' };
+                if (!file) return { url: '', name: 'Sans nom' };
                 if (typeof file === 'object' && file.url) return { url: file.url, name: file.name || 'Fichier' };
                 return { url: file, name: 'Fichier' };
             };
@@ -465,14 +464,23 @@
                         <div className="fixed inset-0 z-[250] bg-black/95 flex flex-col items-center justify-center">
                             <button className="absolute top-6 right-6 text-white bg-white/10 p-4 rounded-full z-[350]" onClick={() => setViewer({...viewer, open: false})}><Icon name="x" size={24}/></button>
                             {viewer.mode === 'grid' ? (
-                                <div className="w-full h-full p-6 overflow-y-auto pt-20">
+                                <div className="w-full h-full p-6 overflow-y-auto pt-20 pb-32">
                                     <h3 className="text-white text-center font-black uppercase text-xl mb-6 italic">Galerie</h3>
                                     <div className="grid grid-cols-2 gap-6 max-w-2xl mx-auto">
                                         {(viewer.photos || []).map((file, idx) => {
-                                            const { url } = getFileData(file);
+                                            const { url, name } = getFileData(file);
                                             return (
-                                                <div key={idx} onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="aspect-square bg-slate-800 rounded-xl overflow-hidden border border-white/10 cursor-pointer shadow-lg flex items-center justify-center">
-                                                    {url.toLowerCase().endsWith('.pdf') ? <Icon name="file" size={40} color="#ef4444"/> : <img src={url} className="w-full h-full object-cover"/>}
+                                                <div key={idx} onClick={() => setViewer({...viewer, mode: 'view', index: idx})} className="flex flex-col gap-2">
+                                                    <div className="aspect-square bg-slate-800 rounded-2xl overflow-hidden border border-white/10 cursor-pointer shadow-lg flex items-center justify-center group relative active:scale-95 transition-all">
+                                                        {url.toLowerCase().endsWith('.pdf') ? (
+                                                            <div className="flex flex-col items-center gap-2">
+                                                                <Icon name="file" size={40} color="#ef4444"/>
+                                                            </div>
+                                                        ) : (
+                                                            <img src={url} className="w-full h-full object-cover"/>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[10px] text-white/60 font-medium text-center truncate px-2">{name}</span>
                                                 </div>
                                             );
                                         })}
@@ -499,11 +507,14 @@
                                         }}><Icon name="trash" size={20}/></button>
                                     </div>
 
-                                    <div className="w-full h-full flex items-center justify-center p-4">
-                                        {getFileData(viewer.photos[viewer.index]).url.toLowerCase().endsWith('.pdf') ? 
-                                            <iframe src={getFileData(viewer.photos[viewer.index]).url} className="w-full h-full max-w-4xl bg-white rounded-2xl shadow-2xl"></iframe> : 
-                                            <img src={getFileData(viewer.photos[viewer.index]).url} className="max-w-full max-h-full object-contain rounded-lg" />
-                                        }
+                                    <div className="w-full h-full flex flex-col items-center justify-center p-4">
+                                        <div className="text-white/40 text-[10px] uppercase font-black mb-4 tracking-widest">{getFileData(viewer.photos[viewer.index]).name}</div>
+                                        <div className="flex-1 w-full max-w-4xl flex items-center justify-center">
+                                            {getFileData(viewer.photos[viewer.index]).url.toLowerCase().endsWith('.pdf') ? 
+                                                <iframe src={getFileData(viewer.photos[viewer.index]).url} className="w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden border-none"></iframe> : 
+                                                <img src={getFileData(viewer.photos[viewer.index]).url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+                                            }
+                                        </div>
                                     </div>
                                 </div>
                             )}
