@@ -43,7 +43,8 @@
                 await supabaseClient.from('btp_data').upsert({ id: 1, content: JSON.stringify(data), lastUpdate: new Date().toISOString() }); 
             },
             fetchInitialData: async () => {
-                const { data } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
+                const { data, error } = await supabaseClient.from('btp_data').select('content').eq('id', 1).maybeSingle();
+                if (error) console.error("Fetch Error:", error);
                 return data ? JSON.parse(data.content) : [];
             },
             subscribeData: (callback) => {
@@ -93,7 +94,7 @@
         function App() {
             const [user, setUser] = useState(null);
             const [projects, setProjects] = useState([]);
-            const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+            const [status, setStatus] = useState('loading'); // 'loading', 'auth_checked', 'ready'
             const [isSyncing, setIsSyncing] = useState(false);
             const [draggedItem, setDraggedItem] = useState(null);
             
@@ -119,36 +120,39 @@
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
             };
 
-            // INITIALISATION BLINDEE
+            // LOGIQUE DE CHARGEMENT FORCEE
+            const loadData = async () => {
+                try {
+                    const data = await window.DatabaseOps.fetchInitialData();
+                    setProjects(data || []);
+                    setStatus('ready');
+                } catch (e) {
+                    console.error(e);
+                    setStatus('ready');
+                }
+            };
+
             useEffect(() => {
-                const init = async () => {
+                const checkSession = async () => {
                     const { data: { session } } = await supabaseClient.auth.getSession();
                     if (session) {
                         setUser(session.user);
-                        const data = await window.DatabaseOps.fetchInitialData();
-                        setProjects(data || []);
-                        setIsCheckingAuth(false);
+                        loadData();
                     } else {
-                        // On attend un tout petit peu au cas où le cookie est en train d'être lu
+                        // On laisse une chance au rafraîchissement auto du token
                         setTimeout(async () => {
                             const { data: { session: retry } } = await supabaseClient.auth.getSession();
-                            if (retry) {
-                                setUser(retry.user);
-                                const data = await window.DatabaseOps.fetchInitialData();
-                                setProjects(data || []);
-                                setIsCheckingAuth(false);
-                            } else {
-                                window.location.href = 'index.html';
-                            }
-                        }, 500);
+                            if (retry) { setUser(retry.user); loadData(); }
+                            else { window.location.href = 'index.html'; }
+                        }, 1000);
                     }
                 };
-                init();
+                checkSession();
 
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
                     if (session) {
                         setUser(session.user);
-                        setIsCheckingAuth(false);
+                        if (status !== 'ready') loadData();
                     } else if (event === 'SIGNED_OUT') {
                         window.location.href = 'index.html';
                     }
@@ -248,14 +252,29 @@
                 return ganttRange.findIndex(d => d.toDateString() === today);
             }, [ganttRange]);
 
-            if (isCheckingAuth) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div><p className="font-black text-[10px] uppercase tracking-widest text-slate-400">Vérification session...</p></div>;
-            if (!activeProject) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-center p-10"><p className="font-black uppercase text-xs text-slate-400 mb-6">Chargement des chantiers...</p><button onClick={() => window.location.reload()} className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg">Actualiser</button></div>;
+            // ECRAN DE CHARGEMENT AMÉLIORÉ
+            if (status === 'loading') return (
+                <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+                    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="font-black text-[10px] uppercase tracking-widest text-slate-400 italic">Connexion sécurisée...</p>
+                </div>
+            );
+
+            if (!activeProject) return (
+                <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-center p-10 gap-6">
+                    <div className="font-black uppercase text-xs text-slate-400 italic">Base de données en attente</div>
+                    <button onClick={loadData} className="px-10 py-4 bg-blue-600 text-white rounded-[24px] font-black text-xs uppercase shadow-xl active:scale-95 transition-all">
+                        Récupérer les chantiers
+                    </button>
+                    <a href="index.html" className="text-slate-300 font-black text-[10px] uppercase underline">Retour accueil</a>
+                </div>
+            );
 
             const sortedDocs = viewer.photos ? [...viewer.photos].reverse() : [];
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden text-slate-800">
-                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50">
+                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0 w-full px-6 z-50 shadow-lg">
                         <div className="flex flex-col">
                             <h1 className="font-black italic text-xs uppercase tracking-tighter">BTP Manager Pro</h1>
                             <div className="flex items-center mt-0.5">
@@ -264,8 +283,12 @@
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={() => { supabaseClient.auth.signOut(); window.location.href='index.html'; }} className="p-3 bg-red-500/20 rounded-xl text-red-400"><Icon name="logout" size={18}/></button>
-                            <a href="index.html" className="p-3 bg-white/10 rounded-xl text-white"><Icon name="home" size={18}/></a>
+                            <button onClick={() => { supabaseClient.auth.signOut(); window.location.href='index.html'; }} className="p-3 bg-red-500/20 rounded-xl text-red-400 shadow-inner">
+                                <Icon name="logout" size={18}/>
+                            </button>
+                            <a href="index.html" className="p-3 bg-white/10 rounded-xl text-white shadow-inner">
+                                <Icon name="home" size={18}/>
+                            </a>
                         </div>
                     </header>
 
@@ -317,29 +340,30 @@
                                         draggable onDragStart={() => setDraggedItem({type: 'lot', index: tIdx})}
                                         onDragOver={e => e.preventDefault()}
                                         onDrop={() => { if(draggedItem?.type === 'lot') { moveLot(draggedItem.index, tIdx); setDraggedItem(null); } }}
-                                        className={`bg-white p-6 rounded-[32px] border shadow-sm ${draggedItem?.type === 'lot' && draggedItem.index === tIdx ? 'opacity-40 scale-95' : ''}`}>
+                                        className={`bg-white p-6 rounded-[32px] border shadow-sm transition-all ${draggedItem?.type === 'lot' && draggedItem.index === tIdx ? 'opacity-40 scale-95 border-dashed border-blue-500' : ''}`}>
                                         
                                         <div className="flex justify-between mb-4 items-center">
                                             <div className="flex items-center gap-2">
-                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing"><Icon name="grip" size={18}/></div>
+                                                <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-blue-500"><Icon name="grip" size={18}/></div>
                                                 <h4 className="font-black uppercase text-blue-600 text-[10px] tracking-widest editable" onClick={() => setDialog({open: true, title: "Lot", value: task.title, type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.map(t => t.id === task.id ? {...t, title: v} : t)} : p))})}>{task.title}</h4>
                                             </div>
                                             <button onClick={() => setDialog({open: true, title: "Supprimer lot ?", type: 'confirm', onConfirm: () => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: p.tasks.filter(t => t.id !== task.id)} : p))})} className="text-slate-200 hover:text-red-500"><Icon name="trash" size={14}/></button>
                                         </div>
 
+                                        <div onDragOver={e => e.preventDefault()}>
                                         {task.subtasks.map((sub, sIdx) => {
                                             const parent = sub.dependsOn ? activeProject.tasks.flatMap(t => t.subtasks).find(st => st.id === sub.dependsOn) : null;
                                             return (
                                                 <div key={sub.id} 
                                                     draggable onDragStart={(e) => { e.stopPropagation(); setDraggedItem({type: 'sub', taskId: task.id, index: sIdx}); }}
                                                     onDrop={(e) => { e.stopPropagation(); if(draggedItem?.type === 'sub' && draggedItem.taskId === task.id) { moveSubtask(task.id, draggedItem.index, sIdx); setDraggedItem(null); } }}
-                                                    className={`mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 ${draggedItem?.type === 'sub' && draggedItem.index === sIdx && draggedItem.taskId === task.id ? 'opacity-30' : ''}`}>
+                                                    className={`mb-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 ${draggedItem?.type === 'sub' && draggedItem.index === sIdx && draggedItem.taskId === task.id ? 'opacity-30 border-blue-500' : ''}`}>
                                                     <div className="flex flex-col justify-center text-slate-300 cursor-grab"><Icon name="grip" size={16}/></div>
                                                     <div className="flex-1">
                                                         <div className="flex justify-between items-start mb-2 font-black text-xs uppercase">
                                                             <div className="flex flex-col">
                                                                 <span className="editable" onClick={() => setDialog({open: true, title: "Tâche", value: sub.title, type: 'input', onConfirm: (v) => updateSub(task.id, sub.id, {title: v})})}>{sub.title}</span>
-                                                                {parent && <span className="text-[7px] text-blue-500 mt-1 italic font-bold">Lien : {parent.title}</span>}
+                                                                {parent && <span className="text-[7px] text-blue-500 mt-1 italic font-bold">Lien après : {parent.title}</span>}
                                                             </div>
                                                             <button onClick={() => setLinkDialog({ open: true, taskId: task.id, subId: sub.id })} className={sub.dependsOn ? 'text-blue-600' : 'text-slate-300'}><Icon name="link" size={14}/></button>
                                                         </div>
@@ -354,7 +378,8 @@
                                                 </div>
                                             );
                                         })}
-                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200">+ Tâche</button>
+                                        </div>
+                                        <button onClick={() => setDialog({open: true, title: "Nouvelle Tâche ?", value: "", type: 'input', onConfirm: (v) => updateSub(task.id, 'new', {title: v, date: new Date().toISOString().split('T')[0], duration: 1, progress: 0, photos: [], invoices: []})})} className="w-full py-4 text-slate-400 font-black text-[9px] uppercase rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-400 hover:text-blue-500 transition-all">+ Tâche</button>
                                     </div>
                                 ))}
                                 <button onClick={() => setDialog({open: true, title: "Nouveau Lot ?", value: "", type: 'input', onConfirm: (v) => triggerSync(projects.map(p => p.id === projectId ? {...p, tasks: [...p.tasks, {id: Date.now().toString(), title: v, subtasks: []}]} : p))})} className="w-full py-5 bg-blue-600 text-white font-black uppercase rounded-[32px] shadow-lg">+ Nouveau Lot</button>
@@ -434,7 +459,7 @@
                                                                 {startIdx !== -1 && (
                                                                     <div className="absolute h-6 bg-blue-600 rounded-lg shadow-sm z-20 flex items-center justify-center overflow-hidden border border-blue-400" 
                                                                         style={{left: (128 + startIdx * ganttZoom)+'px', width: (Math.max(1, diff) * ganttZoom)+'px'}}>
-                                                                        <div className="h-full bg-green-500 absolute left-0 top-0 opacity-80" style={{width: (sub.progress || 0)+'%'}}></div>
+                                                                        <div className="h-full bg-green-500 absolute left-0 top-0 transition-all opacity-80" style={{width: (sub.progress || 0)+'%'}}></div>
                                                                         <span className="relative z-20 text-[7px] font-black text-white">{sub.progress || 0}%</span>
                                                                     </div>
                                                                 )}
@@ -452,7 +477,7 @@
 
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-8 flex justify-around rounded-t-[40px] shadow-2xl z-50">
                         {[{id: 'details', icon: 'edit', label: 'Lots'}, {id: 'planning', icon: 'calendar', label: 'Planning'}, {id: 'tracking', icon: 'camera', label: 'Suivi'}, {id: 'budget', icon: 'wallet', label: 'Budget'}].map(item => (
-                            <a key={item.id} href={`gestion.html?id=${projectId}&view=${item.id}`} className={`flex flex-col items-center flex-1 transition-all ${currentView === item.id ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                            <a key={item.id} href={`gestion.html?id=${projectId}&view=${item.id}`} className={`flex flex-col items-center flex-1 transition-all ${currentView === item.id ? 'text-blue-600 font-bold scale-110' : 'text-slate-300'}`}>
                                 <div className={`p-2 rounded-xl ${currentView === item.id ? 'bg-blue-50' : ''}`}><Icon name={item.icon} size={22}/></div>
                                 <span className="text-[9px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
                             </a>
@@ -463,7 +488,7 @@
                         <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
                                 <h3 className="text-lg font-black uppercase italic mb-6 text-center">{dialog.title}</h3>
-                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
+                                {dialog.type === 'input' && <input autoFocus className="w-full p-4 bg-slate-100 rounded-2xl font-bold mb-6 outline-none focus:ring-2 focus:ring-blue-500" value={dialog.value} onChange={e => setDialog({...dialog, value: e.target.value})} />}
                                 <div className="flex gap-3">
                                     <button className="flex-1 py-4 font-black uppercase text-slate-400" onClick={() => setDialog({...dialog, open: false})}>Annuler</button>
                                     <button className="flex-1 py-4 font-black uppercase text-white bg-blue-600 rounded-2xl" onClick={() => { dialog.onConfirm(dialog.value); setDialog({...dialog, open: false}); }}>Confirmer</button>
@@ -479,7 +504,7 @@
                                 <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                                     <button className="w-full p-4 rounded-2xl text-left font-bold text-xs bg-slate-100 uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: null}); setLinkDialog({open: false}); }}>Aucun lien</button>
                                     {activeProject.tasks.flatMap(t => t.subtasks).filter(s => s.id !== linkDialog.subId).map(s => (
-                                        <button key={s.id} className="w-full p-4 rounded-2xl text-left font-bold text-xs bg-slate-50 border hover:bg-blue-50 uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: s.id}); setLinkDialog({open: false}); }}>{s.title}</button>
+                                        <button key={s.id} className="w-full p-4 rounded-2xl text-left font-bold text-xs bg-slate-50 border hover:bg-blue-50 transition-all uppercase" onClick={() => { updateSub(linkDialog.taskId, linkDialog.subId, {dependsOn: s.id}); setLinkDialog({open: false}); }}>{s.title}</button>
                                     ))}
                                 </div>
                                 <button className="mt-6 w-full py-4 font-black uppercase text-slate-400 shrink-0" onClick={() => setLinkDialog({open: false})}>Annuler</button>
@@ -527,7 +552,7 @@
                                         <div className="text-white/40 text-[10px] uppercase font-black mb-4 tracking-widest">{getFileData(sortedDocs[viewer.index]).name}</div>
                                         <div className="flex-1 w-full max-w-4xl flex items-center justify-center">
                                             {getFileData(sortedDocs[viewer.index]).url.toLowerCase().endsWith('.pdf') ? 
-                                                <iframe src={getFileData(sortedDocs[viewer.index]).url} className="w-full h-full bg-white rounded-2xl"></iframe> : 
+                                                <iframe src={getFileData(sortedDocs[viewer.index]).url} className="w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden border-none"></iframe> : 
                                                 <img src={getFileData(sortedDocs[viewer.index]).url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
                                             }
                                         </div>
